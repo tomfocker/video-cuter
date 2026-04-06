@@ -2,4 +2,7 @@
 _archive/
 .superpowers/
 .trae/
-
+.worktrees/
+worktrees/
+cut.code-workspace
+*.log

@@ -1,5 +1,6 @@
 import { AppState, ws, setWs } from './state.js';
 import { renderTranscriptionText } from './transcription.js';
+import { escapeHTML } from './utils.js';
 
 function getTty() { return document.getElementById('tty'); }
 function getFfmpegProgressBar() { return document.getElementById('ffmpegProgressBar'); }
@@ -19,9 +20,8 @@ function log(message, isSystem = false) {
     }
 }
 
-function arrayBufferToBase64(buffer) {
+function bytesToBase64(bytes) {
     let binary = '';
-    const bytes = new Uint8Array(buffer);
     for (let i = 0; i < bytes.byteLength; i++) {
         binary += String.fromCharCode(bytes[i]);
     }
@@ -125,6 +125,9 @@ export async function transcribeVideo() {
     if (progressBar) progressBar.style.width = '0%';
     
     let wsInstance = null;
+    let inputDir = null;
+    let audioOutput = null;
+    let timeoutId = null;
     
     try {
         const videoFile = AppState.videoFiles[AppState.currentVideoIndex];
@@ -133,7 +136,7 @@ export async function transcribeVideo() {
         if (transcribeStatus) transcribeStatus.textContent = '提取音频中...';
         if (loadingText) loadingText.textContent = '提取音频中...';
         
-        const inputDir = `/transcribe_input_${AppState.currentVideoIndex}`;
+        inputDir = `/transcribe_input_${AppState.currentVideoIndex}`;
         try { await AppState.ffmpeg.createDir(inputDir); } catch(e) {}
         
         try {
@@ -144,7 +147,7 @@ export async function transcribeVideo() {
         }
         
         const inputPath = `${inputDir}/${videoFile.file.name}`;
-        const audioOutput = 'audio_for_transcribe.raw';
+        audioOutput = 'audio_for_transcribe.raw';
         
         const audioArgs = ['-i', inputPath, '-vn', '-acodec', 'pcm_f32le', '-ar', '16000', '-ac', '1', '-f', 'f32le', audioOutput];
         log(`[提取音频]: ffmpeg ${audioArgs.join(' ')}`, true);
@@ -186,6 +189,10 @@ export async function transcribeVideo() {
             const doResolve = (result) => {
                 if (!isResolved) {
                     isResolved = true;
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
+                        timeoutId = null;
+                    }
                     resolve(result);
                 }
             };
@@ -193,6 +200,10 @@ export async function transcribeVideo() {
             const doReject = (error) => {
                 if (!isResolved) {
                     isResolved = true;
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
+                        timeoutId = null;
+                    }
                     reject(error);
                 }
             };
@@ -207,8 +218,8 @@ export async function transcribeVideo() {
                 const totalChunks = Math.ceil(audioBytes.length / chunkSize);
                 
                 for (let offset = 0; offset < audioBytes.length; offset += chunkSize) {
-                    const chunk = audioBytes.slice(offset, Math.min(offset + chunkSize, audioBytes.length));
-                    const chunkBase64 = arrayBufferToBase64(chunk.buffer);
+                    const chunk = audioBytes.subarray(offset, Math.min(offset + chunkSize, audioBytes.length));
+                    const chunkBase64 = bytesToBase64(chunk);
                     
                     const message = {
                         source: 'file',
@@ -306,7 +317,7 @@ export async function transcribeVideo() {
                 }
             };
             
-            setTimeout(() => {
+            timeoutId = setTimeout(() => {
                 doReject(new Error('识别超时'));
             }, 300000);
         });
@@ -320,20 +331,26 @@ export async function transcribeVideo() {
         updateTranscribeStatus();
         if (transcriptionLoading) transcriptionLoading.classList.add('hidden');
         if (transcribeBtn) transcribeBtn.disabled = false;
-        
-        await AppState.ffmpeg.deleteFile(audioOutput);
-        try { await AppState.ffmpeg.unmount(inputDir); } catch(e) {}
-        try { await AppState.ffmpeg.deleteDir(inputDir); } catch(e) {}
-        
     } catch (err) {
         log(`[错误] ${err.message}`, true);
-        if (transcriptionText) transcriptionText.innerHTML = `<span class="text-red-400">识别失败: ${err.message}</span>`;
+        if (transcriptionText) transcriptionText.innerHTML = `<span class="text-red-400">识别失败: ${escapeHTML(err.message)}</span>`;
         if (transcriptionContent) transcriptionContent.classList.remove('hidden');
         if (transcriptionLoading) transcriptionLoading.classList.add('hidden');
         if (transcribeBtn) transcribeBtn.disabled = false;
         
         if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
             wsInstance.close();
+        }
+    } finally {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+        if (audioOutput) {
+            try { await AppState.ffmpeg.deleteFile(audioOutput); } catch (e) {}
+        }
+        if (inputDir) {
+            try { await AppState.ffmpeg.unmount(inputDir); } catch (e) {}
+            try { await AppState.ffmpeg.deleteDir(inputDir); } catch (e) {}
         }
     }
 }

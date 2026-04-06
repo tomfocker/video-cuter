@@ -26,6 +26,7 @@ function saveCurrentWorkspace() {
     };
     
     localStorage.setItem('videoCutterWorkspace', JSON.stringify(workspaceData));
+    AppState.savedWorkspaceData = workspaceData;
 }
 
 function restoreWorkspace() {

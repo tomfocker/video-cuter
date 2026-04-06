@@ -3,6 +3,27 @@ import { initWaveSurfer, renderAllSegments, saveCurrentSegments } from './wavefo
 import { updateTranscriptionHighlight, renderTranscriptionText } from './transcription.js';
 import { escapeHTML } from './utils.js';
 
+function clearTranscriptionUI() {
+    AppState.transcriptionResult = null;
+    AppState.bilingualSrtContent = null;
+    AppState.pendingSelections = [];
+    AppState.excludeSelections = [];
+    AppState.pendingPreviewRegion = null;
+    AppState.isPreviewMode = false;
+    AppState.isResetState = false;
+    AppState.deletionMap.clear();
+
+    const transcriptionPanel = document.getElementById('transcriptionPanel');
+    const transcriptionContent = document.getElementById('transcriptionContent');
+    const transcriptionText = document.getElementById('transcriptionText');
+    const downloadBilingualSrtBtn = document.getElementById('downloadBilingualSrtBtn');
+
+    if (transcriptionPanel) transcriptionPanel.classList.add('hidden');
+    if (transcriptionContent) transcriptionContent.classList.add('hidden');
+    if (transcriptionText) transcriptionText.textContent = '';
+    if (downloadBilingualSrtBtn) downloadBilingualSrtBtn.classList.add('hidden');
+}
+
 function removeTranscriptionResultAtIndex(idx) {
     const nextResults = {};
 
@@ -85,9 +106,12 @@ window.removeVideo = (idx) => {
 
     if (AppState.videoFiles.length > 0) {
         switchToVideo(Math.min(idx, AppState.videoFiles.length - 1));
+        if (window.saveCurrentWorkspace) window.saveCurrentWorkspace();
     } else {
         AppState.currentVideoIndex = -1;
-        AppState.transcriptionResult = null;
+        AppState.savedWorkspaceData = null;
+        localStorage.removeItem('videoCutterWorkspace');
+        clearTranscriptionUI();
         document.getElementById('workspace').classList.add('hidden');
         document.getElementById('uploadSection').classList.remove('hidden');
     }
@@ -139,10 +163,10 @@ export function resetWorkspace() {
     AppState.videoFiles = [];
     AppState.allSegments = [];
     AppState.currentVideoIndex = -1;
-    AppState.transcriptionResult = null;
     AppState.transcriptionResults = {};
     AppState.savedWorkspaceData = null;
     localStorage.removeItem('videoCutterWorkspace');
+    clearTranscriptionUI();
     document.getElementById('segmentsListContainer').innerHTML = '';
     document.getElementById('videoListContainer').innerHTML = '';
     document.getElementById('workspace').classList.add('hidden');

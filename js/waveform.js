@@ -55,6 +55,148 @@ export function saveCurrentSegments() {
 let renderAllSegmentsCallback = null;
 let updateTranscriptionHighlightCallback = null;
 
+function inferRegionUpdateMode(region) {
+    const dragStartState = region.dragStartState;
+    if (!dragStartState) return 'move';
+
+    const startChanged = Math.abs(region.start - dragStartState.start) > 0.0001;
+    const endChanged = Math.abs(region.end - dragStartState.end) > 0.0001;
+
+    if (startChanged && !endChanged) return 'resize-start';
+    if (!startChanged && endChanged) return 'resize-end';
+    return 'move';
+}
+
+function getSiblingSegments(regionId) {
+    if (!AppState.wsRegions) return [];
+
+    return AppState.wsRegions.getRegions()
+        .filter((region) => !region.isHighlight && region.id !== regionId)
+        .map((region) => ({
+            id: region.id,
+            start: region.start,
+            end: region.end
+        }))
+        .sort((a, b) => a.start - b.start);
+}
+
+function getAdjacentNeighbors(candidate, neighbors) {
+    let previous = null;
+    let next = null;
+
+    for (const seg of neighbors) {
+        if (seg.end <= candidate.start) {
+            previous = seg;
+            continue;
+        }
+
+        if (!next) {
+            next = seg;
+        }
+
+        if (seg.start < candidate.start) {
+            previous = seg;
+        }
+    }
+
+    return { previous, next };
+}
+
+export function snapRegionBounds(candidate, neighbors, context = {}) {
+    const minDuration = context.minDuration ?? 0.1;
+    const duration = Math.max(minDuration, context.originalDuration ?? (candidate.end - candidate.start));
+    const { previous, next } = getAdjacentNeighbors(candidate, neighbors);
+
+    let start = candidate.start;
+    let end = candidate.end;
+
+    if (context.mode === 'resize-start') {
+        if (previous && start < previous.end) {
+            start = previous.end;
+        }
+        start = Math.min(start, end - minDuration);
+        return { start, end };
+    }
+
+    if (context.mode === 'resize-end') {
+        if (next && end > next.start) {
+            end = next.start;
+        }
+        end = Math.max(end, start + minDuration);
+        return { start, end };
+    }
+
+    if (previous && start < previous.end) {
+        start = previous.end;
+        end = start + duration;
+    }
+
+    if (next && end > next.start) {
+        end = next.start;
+        start = end - duration;
+    }
+
+    if (previous && start < previous.end) {
+        start = previous.end;
+        end = Math.max(start + minDuration, end);
+    }
+
+    return { start, end };
+}
+
+function buildSegmentCard(seg, index) {
+    const startStr = formatTime(seg.start);
+    const endStr = formatTime(seg.end);
+    const durStr = formatTime(seg.end - seg.start);
+    const summary = `${startStr} → ${endStr} ・ 时长 ${durStr}`;
+    const isCurrentVideo = seg.videoIndex === AppState.currentVideoIndex;
+    const safeVideoName = escapeHTML(seg.videoName);
+    const safeSegIdArg = JSON.stringify(String(seg.id));
+
+    return `
+        <article class="rounded-2xl border border-gray-700/70 bg-gray-900/60 p-3.5 shadow-lg shadow-black/10 transition-all hover:border-gray-600/80 hover:bg-gray-900 ${isCurrentVideo ? 'ring-1 ring-indigo-500/30 bg-indigo-950/20' : ''}">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex items-start gap-3">
+                    <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-xs font-bold text-indigo-200">${index + 1}</span>
+                    <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h4 class="text-sm font-semibold text-white">片段 ${index + 1}</h4>
+                            ${isCurrentVideo ? '<span class="rounded-full border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-200">当前视频</span>' : ''}
+                        </div>
+                        <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                            <span class="uppercase tracking-[0.18em] text-gray-500">来源视频</span>
+                            <span class="video-source-tag" title="${safeVideoName}">${safeVideoName}</span>
+                        </div>
+                        <div class="clip-summary mt-2 text-xs text-gray-400">${summary}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div class="flex flex-wrap gap-2">
+                    <button onclick='window.playSegment(${seg.videoIndex}, ${safeSegIdArg})' class="inline-flex items-center gap-1.5 rounded-xl border border-gray-600 bg-gray-800/80 px-3 py-2 text-xs font-medium text-gray-200 transition-colors hover:border-indigo-400/40 hover:bg-gray-700 hover:text-white" title="播放预览">
+                        <i data-lucide="play" class="w-3.5 h-3.5"></i> 预览
+                    </button>
+                    <button onclick="window.pauseSegment()" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-600 bg-gray-800/80 px-3 py-2 text-xs font-medium text-gray-200 transition-colors hover:border-gray-500 hover:bg-gray-700 hover:text-white" title="暂停">
+                        <i data-lucide="pause" class="w-3.5 h-3.5"></i> 暂停
+                    </button>
+                </div>
+                <div class="flex flex-wrap gap-2 xl:justify-end">
+                    <button onclick='window.exportSingleAudio(${seg.videoIndex}, ${safeSegIdArg}, ${index+1})' class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500 hover:text-white" title="导出音频">
+                        <i data-lucide="music" class="w-3.5 h-3.5"></i> 音频
+                    </button>
+                    <button onclick='window.smartExportSingleVideo(${seg.videoIndex}, ${safeSegIdArg}, ${index+1})' class="inline-flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs font-medium text-indigo-200 transition-colors hover:bg-indigo-500 hover:text-white" title="导出视频">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> 视频
+                    </button>
+                    <button onclick='window.removeSegment(${seg.videoIndex}, ${safeSegIdArg})' class="inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300 transition-colors hover:bg-red-500 hover:text-white" title="删除选区">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 删除片段
+                    </button>
+                </div>
+            </div>
+        </article>
+    `;
+}
+
 export function setWaveformCallbacks(callbacks) {
     if (callbacks.renderAllSegments) renderAllSegmentsCallback = callbacks.renderAllSegments;
     if (callbacks.updateTranscriptionHighlight) updateTranscriptionHighlightCallback = callbacks.updateTranscriptionHighlight;
@@ -75,6 +217,7 @@ export function renderAllSegments() {
     const segmentsList = document.getElementById('segmentsListContainer');
     const totalDurationDisplay = document.getElementById('totalDurationDisplay');
     const totalDurationValue = document.getElementById('totalDurationValue');
+    const segmentsCountBadge = document.getElementById('segmentsCountBadge');
     const smartMergeVideoBtn = document.getElementById('smartMergeVideoBtn');
     const batchAudioBtn = document.getElementById('batchAudioBtn');
     const mergeAudioBtn = document.getElementById('mergeAudioBtn');
@@ -96,43 +239,23 @@ export function renderAllSegments() {
     } else {
         if (totalDurationDisplay) totalDurationDisplay.classList.add('hidden');
     }
+    if (segmentsCountBadge) segmentsCountBadge.textContent = String(AppState.allSegments.length);
     
     if (!hasRegions) {
-        segmentsList.innerHTML = '<div class="text-gray-500 text-sm py-8 text-center italic">暂无选区，请在上方波形图上按住鼠标拖拽进行框选。</div>';
+        segmentsList.innerHTML = `
+            <div class="rounded-2xl border border-dashed border-gray-700 bg-gray-950/40 px-4 py-10 text-center">
+                <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-800 text-gray-500">
+                    <i data-lucide="layers" class="w-5 h-5"></i>
+                </div>
+                <p class="mt-4 text-sm font-medium text-gray-300">还没有已选片段</p>
+                <p class="mt-2 text-xs leading-6 text-gray-500">在左侧波形图里拖拽选择，片段会按卡片形式整理到这里。</p>
+            </div>
+        `;
+        lucide.createIcons();
         return;
     }
     
-    let html = '';
-    AppState.allSegments.forEach((seg, index) => {
-        const startStr = formatTime(seg.start);
-        const endStr = formatTime(seg.end);
-        const durStr = formatTime(seg.end - seg.start);
-        const isCurrentVideo = seg.videoIndex === AppState.currentVideoIndex;
-        const safeVideoName = escapeHTML(seg.videoName);
-        
-        html += `
-        <div class="flex flex-col xl:flex-row xl:items-center justify-between p-3 border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors gap-2 ${isCurrentVideo ? 'bg-indigo-900/20' : ''}">
-            <div class="flex items-center gap-3 flex-wrap">
-                <span class="w-6 h-6 rounded-full bg-indigo-900 text-indigo-300 flex items-center justify-center text-xs font-bold">${index + 1}</span>
-                <span class="video-source-tag" title="${safeVideoName}">${safeVideoName}</span>
-                <div class="flex flex-wrap gap-3 text-sm font-mono text-gray-300">
-                    <span><span class="text-gray-500">起:</span>${startStr}</span>
-                    <span><span class="text-gray-500">止:</span>${endStr}</span>
-                    <span class="text-green-400"><span class="text-gray-500">长:</span>${durStr}</span>
-                </div>
-            </div>
-            <div class="flex items-center gap-1 flex-wrap">
-                <button onclick="window.playSegment(${seg.videoIndex}, '${seg.id}')" class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded" title="播放预览"><i data-lucide="play" class="w-4 h-4"></i></button>
-                <button onclick="window.pauseSegment()" class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded" title="暂停"><i data-lucide="pause" class="w-4 h-4"></i></button>
-                <div class="w-px h-4 bg-gray-600 mx-1"></div>
-                <button onclick="window.exportSingleAudio(${seg.videoIndex}, '${seg.id}', ${index+1})" class="text-xs p-1.5 text-emerald-400 hover:text-white hover:bg-emerald-600 rounded flex items-center gap-1" title="导出音频"><i data-lucide="music" class="w-3 h-3"></i></button>
-                <button onclick="window.smartExportSingleVideo(${seg.videoIndex}, '${seg.id}', ${index+1})" class="text-xs px-2 py-1.5 text-indigo-300 hover:text-white hover:bg-indigo-600 rounded flex items-center gap-1" title="导出视频"><i data-lucide="download" class="w-3 h-3"></i> 导出</button>
-                <div class="w-px h-4 bg-gray-600 mx-1"></div>
-                <button onclick="window.removeSegment(${seg.videoIndex}, '${seg.id}')" class="p-1.5 text-red-400 hover:text-white hover:bg-red-600 rounded" title="删除选区"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-            </div>
-        </div>`;
-    });
-    segmentsList.innerHTML = html;
+    segmentsList.innerHTML = AppState.allSegments.map((seg, index) => buildSegmentCard(seg, index)).join('');
     lucide.createIcons();
 }
 
@@ -278,29 +401,50 @@ export function initWaveSurfer(url, savedSegments = []) {
         }
     });
     
-    AppState.wsRegions.on('region-update-start', (region) => { region.dragStartState = { start: region.start, end: region.end }; });
+    AppState.wsRegions.on('region-update-start', (region) => {
+        region.dragStartState = { start: region.start, end: region.end };
+        region.lastValidStart = region.start;
+        region.lastValidEnd = region.end;
+    });
     
     AppState.wsRegions.on('region-updating', (region) => {
-        const tempRegion = { start: region.start, end: region.end, id: region.id };
-        if (checkRegionOverlap(tempRegion)) {
-            region.setOptions({ start: region.dragStartState.start, end: region.dragStartState.end });
-        } else {
-            region.lastValidStart = region.start;
-            region.lastValidEnd = region.end;
+        const snapped = snapRegionBounds(
+            { start: region.start, end: region.end },
+            getSiblingSegments(region.id),
+            {
+                mode: inferRegionUpdateMode(region),
+                minDuration: 0.1,
+                originalDuration: region.dragStartState ? (region.dragStartState.end - region.dragStartState.start) : (region.end - region.start)
+            }
+        );
+
+        if (snapped.start !== region.start || snapped.end !== region.end) {
+            region.setOptions(snapped);
         }
+
+        region.lastValidStart = snapped.start;
+        region.lastValidEnd = snapped.end;
         if (AppState.transcriptionResult && AppState.transcriptionResult.chunks && updateTranscriptionHighlightCallback) {
-            updateTranscriptionHighlightCallback({ start: region.start, end: region.end });
+            updateTranscriptionHighlightCallback(snapped);
         }
     });
     
     AppState.wsRegions.on('region-updated', (region) => {
-        const tempRegion = { start: region.start, end: region.end, id: region.id };
-        if (checkRegionOverlap(tempRegion)) {
-            region.setOptions({ start: region.lastValidStart, end: region.lastValidEnd });
-            return;
+        const snapped = snapRegionBounds(
+            { start: region.start, end: region.end },
+            getSiblingSegments(region.id),
+            {
+                mode: inferRegionUpdateMode(region),
+                minDuration: 0.1,
+                originalDuration: region.dragStartState ? (region.dragStartState.end - region.dragStartState.start) : (region.end - region.start)
+            }
+        );
+
+        if (snapped.start !== region.start || snapped.end !== region.end) {
+            region.setOptions(snapped);
         }
-        region.lastValidStart = region.start;
-        region.lastValidEnd = region.end;
+        region.lastValidStart = snapped.start;
+        region.lastValidEnd = snapped.end;
         if (!AppState.isPreviewMode) {
             renderAllSegments();
             if (AppState.transcriptionResult && AppState.transcriptionResult.chunks && updateTranscriptionHighlightCallback) {
