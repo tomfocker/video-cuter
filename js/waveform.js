@@ -10,24 +10,6 @@ export function resetZoom() {
 let switchToVideoCallback = null;
 export function setSwitchToVideoCallback(cb) { switchToVideoCallback = cb; }
 
-export function mergeOverlappingSegments(segments) {
-    if (segments.length <= 1) return segments;
-    const result = [];
-    let current = segments[0];
-    for (let i = 1; i < segments.length; i++) {
-        const next = segments[i];
-        const sameVideo = (current.videoIndex === undefined) || (next.videoIndex === current.videoIndex);
-        if (sameVideo && next.start <= current.end) {
-            current.end = Math.max(current.end, next.end);
-        } else {
-            result.push(current);
-            current = next;
-        }
-    }
-    result.push(current);
-    return result;
-}
-
 export function checkRegionOverlap(tempRegion) {
     if (!AppState.wsRegions) return false;
     const regions = AppState.wsRegions.getRegions();
@@ -41,14 +23,15 @@ export function checkRegionOverlap(tempRegion) {
 export function saveCurrentSegments() {
     if (AppState.currentVideoIndex === -1 || !AppState.wsRegions) return;
     const regions = AppState.wsRegions.getRegions();
-    let segments = regions.map(r => ({
+    const segments = regions
+        .filter((region) => !region.isHighlight)
+        .map(r => ({
         id: r.id,
         start: r.start,
         end: r.end,
         color: r.options?.color || 'rgba(99, 102, 241, 0.4)'
-    }));
-    segments.sort((a, b) => a.start - b.start);
-    segments = mergeOverlappingSegments(segments.map(s => ({ ...s, videoIndex: AppState.currentVideoIndex })));
+    }))
+        .sort((a, b) => a.start - b.start);
     AppState.videoFiles[AppState.currentVideoIndex].segments = segments;
 }
 
@@ -67,6 +50,12 @@ function inferRegionUpdateMode(region) {
     return 'move';
 }
 
+function getRegionUpdateMode(region, side) {
+    if (side === 'start') return 'resize-start';
+    if (side === 'end') return 'resize-end';
+    return inferRegionUpdateMode(region);
+}
+
 function getSiblingSegments(regionId) {
     if (!AppState.wsRegions) return [];
 
@@ -80,68 +69,153 @@ function getSiblingSegments(regionId) {
         .sort((a, b) => a.start - b.start);
 }
 
-function getAdjacentNeighbors(candidate, neighbors) {
+function getAdjacentNeighbors(candidate, neighbors, context = {}) {
+    const referenceStart = Number.isFinite(context.originalStart) ? context.originalStart : candidate.start;
+    const referenceEnd = Number.isFinite(context.originalEnd) ? context.originalEnd : candidate.end;
     let previous = null;
     let next = null;
 
     for (const seg of neighbors) {
-        if (seg.end <= candidate.start) {
+        if (seg.start < referenceStart) {
             previous = seg;
             continue;
         }
 
-        if (!next) {
+        if (seg.start >= referenceEnd && !next) {
             next = seg;
-        }
-
-        if (seg.start < candidate.start) {
-            previous = seg;
         }
     }
 
     return { previous, next };
 }
 
+function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
+
+function getOriginalBounds(context, fallback) {
+    const hasOriginalStart = Number.isFinite(context.originalStart);
+    const hasOriginalEnd = Number.isFinite(context.originalEnd);
+
+    if (hasOriginalStart && hasOriginalEnd) {
+        return { start: context.originalStart, end: context.originalEnd };
+    }
+
+    return fallback;
+}
+
+function hasOverlap(candidate, neighbors) {
+    return neighbors.some((seg) => candidate.start < seg.end && candidate.end > seg.start);
+}
+
 export function snapRegionBounds(candidate, neighbors, context = {}) {
     const minDuration = context.minDuration ?? 0.1;
     const duration = Math.max(minDuration, context.originalDuration ?? (candidate.end - candidate.start));
-    const { previous, next } = getAdjacentNeighbors(candidate, neighbors);
-
-    let start = candidate.start;
-    let end = candidate.end;
+    const { previous, next } = getAdjacentNeighbors(candidate, neighbors, context);
+    const originalBounds = getOriginalBounds(context, candidate);
 
     if (context.mode === 'resize-start') {
-        if (previous && start < previous.end) {
-            start = previous.end;
+        const minStart = previous ? previous.end : Number.NEGATIVE_INFINITY;
+        const maxStart = candidate.end - minDuration;
+
+        if (maxStart < minStart) {
+            return originalBounds;
         }
-        start = Math.min(start, end - minDuration);
-        return { start, end };
+
+        return {
+            start: clamp(candidate.start, minStart, maxStart),
+            end: candidate.end
+        };
     }
 
     if (context.mode === 'resize-end') {
-        if (next && end > next.start) {
-            end = next.start;
+        const minEnd = candidate.start + minDuration;
+        const maxEnd = next ? next.start : Number.POSITIVE_INFINITY;
+
+        if (maxEnd < minEnd) {
+            return originalBounds;
         }
-        end = Math.max(end, start + minDuration);
-        return { start, end };
+
+        return {
+            start: candidate.start,
+            end: clamp(candidate.end, minEnd, maxEnd)
+        };
     }
 
-    if (previous && start < previous.end) {
-        start = previous.end;
-        end = start + duration;
+    const minStart = previous ? previous.end : Number.NEGATIVE_INFINITY;
+    const maxStart = next ? next.start - duration : Number.POSITIVE_INFINITY;
+
+    if (maxStart < minStart) {
+        return originalBounds;
     }
 
-    if (next && end > next.start) {
-        end = next.start;
-        start = end - duration;
-    }
-
-    if (previous && start < previous.end) {
-        start = previous.end;
-        end = Math.max(start + minDuration, end);
-    }
+    const start = clamp(candidate.start, minStart, maxStart);
+    const end = start + duration;
 
     return { start, end };
+}
+
+export function resolveRegionUpdateBounds(candidate, neighbors, context = {}) {
+    const originalBounds = getOriginalBounds(context, candidate);
+    const originalDuration = Math.max(context.minDuration ?? 0.1, context.originalDuration ?? (originalBounds.end - originalBounds.start));
+    const candidateDuration = candidate.end - candidate.start;
+    const durationPreserved = Math.abs(candidateDuration - originalDuration) <= 0.02;
+
+    const modes = [];
+    if (durationPreserved) {
+        modes.push('move');
+    }
+    if (context.mode) {
+        modes.push(context.mode);
+    }
+    modes.push('move', 'resize-start', 'resize-end');
+
+    const tried = new Set();
+    for (const mode of modes) {
+        if (tried.has(mode)) continue;
+        tried.add(mode);
+
+        const resolved = snapRegionBounds(candidate, neighbors, { ...context, mode });
+        if (!hasOverlap(resolved, neighbors)) {
+            return resolved;
+        }
+    }
+
+    return originalBounds;
+}
+
+function boundsMatch(left, right) {
+    return Math.abs(left.start - right.start) < 0.0001 && Math.abs(left.end - right.end) < 0.0001;
+}
+
+export function commitResolvedBounds(region, snapped) {
+    const currentBounds = { start: region.start, end: region.end };
+
+    if (!boundsMatch(currentBounds, snapped)) {
+        region.setOptions(snapped);
+        region.start = snapped.start;
+        region.end = snapped.end;
+    }
+
+    region.lastValidStart = snapped.start;
+    region.lastValidEnd = snapped.end;
+    region.pendingResolvedBounds = null;
+    return snapped;
+}
+
+function beginRegionUpdateSession(region, side) {
+    if (!region.dragStartState) {
+        region.dragStartState = {
+            start: region.lastValidStart ?? region.start,
+            end: region.lastValidEnd ?? region.end
+        };
+    }
+    region.lastUpdateSide = side;
+}
+
+function endRegionUpdateSession(region) {
+    region.dragStartState = null;
+    region.lastUpdateSide = undefined;
 }
 
 function buildSegmentCard(seg, index) {
@@ -206,10 +280,11 @@ export function renderAllSegments() {
     saveCurrentSegments();
     AppState.allSegments = [];
     AppState.videoFiles.forEach((v, vIdx) => {
-        let videoSegments = [...v.segments].sort((a, b) => a.start - b.start);
-        videoSegments = mergeOverlappingSegments(videoSegments.map(seg => ({
-            ...seg, videoIndex: vIdx, videoName: v.name, videoFile: v.file, videoObjectURL: v.objectURL
-        })));
+        const videoSegments = [...v.segments]
+            .sort((a, b) => a.start - b.start)
+            .map(seg => ({
+                ...seg, videoIndex: vIdx, videoName: v.name, videoFile: v.file, videoObjectURL: v.objectURL
+            }));
         AppState.allSegments = AppState.allSegments.concat(videoSegments);
     });
     AppState.allSegments.sort((a, b) => a.videoIndex !== b.videoIndex ? a.videoIndex - b.videoIndex : a.start - b.start);
@@ -401,50 +476,28 @@ export function initWaveSurfer(url, savedSegments = []) {
         }
     });
     
-    AppState.wsRegions.on('region-update-start', (region) => {
-        region.dragStartState = { start: region.start, end: region.end };
-        region.lastValidStart = region.start;
-        region.lastValidEnd = region.end;
-    });
-    
-    AppState.wsRegions.on('region-updating', (region) => {
-        const snapped = snapRegionBounds(
-            { start: region.start, end: region.end },
-            getSiblingSegments(region.id),
-            {
-                mode: inferRegionUpdateMode(region),
-                minDuration: 0.1,
-                originalDuration: region.dragStartState ? (region.dragStartState.end - region.dragStartState.start) : (region.end - region.start)
-            }
-        );
-
-        if (snapped.start !== region.start || snapped.end !== region.end) {
-            region.setOptions(snapped);
-        }
-
-        region.lastValidStart = snapped.start;
-        region.lastValidEnd = snapped.end;
+    AppState.wsRegions.on('region-update', (region, side) => {
+        beginRegionUpdateSession(region, side);
         if (AppState.transcriptionResult && AppState.transcriptionResult.chunks && updateTranscriptionHighlightCallback) {
-            updateTranscriptionHighlightCallback(snapped);
+            updateTranscriptionHighlightCallback({ start: region.start, end: region.end });
         }
     });
     
-    AppState.wsRegions.on('region-updated', (region) => {
-        const snapped = snapRegionBounds(
+    AppState.wsRegions.on('region-updated', (region, side) => {
+        const snapped = resolveRegionUpdateBounds(
             { start: region.start, end: region.end },
             getSiblingSegments(region.id),
             {
-                mode: inferRegionUpdateMode(region),
+                mode: getRegionUpdateMode(region, side ?? region.lastUpdateSide),
                 minDuration: 0.1,
-                originalDuration: region.dragStartState ? (region.dragStartState.end - region.dragStartState.start) : (region.end - region.start)
+                originalDuration: region.dragStartState ? (region.dragStartState.end - region.dragStartState.start) : (region.end - region.start),
+                originalStart: region.dragStartState?.start,
+                originalEnd: region.dragStartState?.end
             }
         );
 
-        if (snapped.start !== region.start || snapped.end !== region.end) {
-            region.setOptions(snapped);
-        }
-        region.lastValidStart = snapped.start;
-        region.lastValidEnd = snapped.end;
+        commitResolvedBounds(region, snapped);
+        endRegionUpdateSession(region);
         if (!AppState.isPreviewMode) {
             renderAllSegments();
             if (AppState.transcriptionResult && AppState.transcriptionResult.chunks && updateTranscriptionHighlightCallback) {

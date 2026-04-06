@@ -136,9 +136,101 @@ test('snapRegionBounds preserves duration when moving into the next segment', ()
             { id: 'prev', start: 1, end: 4 },
             { id: 'next', start: 6, end: 10 }
         ],
-        { mode: 'move', minDuration: 0.1, originalDuration: 2 }
+        { mode: 'move', minDuration: 0.1, originalDuration: 2, originalStart: 2, originalEnd: 4 }
     );
 
     assert.equal(result.end, 6);
     assert.equal(result.start, 4);
+});
+
+test('snapRegionBounds preserves duration when moving into the previous segment', () => {
+    const { snapRegionBounds } = createWaveformModule({}, ['snapRegionBounds']);
+
+    const result = snapRegionBounds(
+        { start: 2.8, end: 4.8 },
+        [
+            { id: 'prev', start: 1, end: 3 }
+        ],
+        {
+            mode: 'move',
+            minDuration: 0.1,
+            originalDuration: 2,
+            originalStart: 4,
+            originalEnd: 6
+        }
+    );
+
+    assert.equal(result.start, 3);
+    assert.equal(result.end, 5);
+});
+
+test('saveCurrentSegments keeps overlapping regions instead of collapsing one away', () => {
+    const appState = {
+        currentVideoIndex: 0,
+        videoFiles: [{ segments: [] }],
+        wsRegions: {
+            getRegions() {
+                return [
+                    { id: 'seg-1', start: 1, end: 4, options: { color: 'a' } },
+                    { id: 'seg-2', start: 3.5, end: 6, options: { color: 'b' } }
+                ];
+            }
+        }
+    };
+
+    const { saveCurrentSegments } = createWaveformModule(
+        {
+            AppState: appState
+        },
+        ['saveCurrentSegments']
+    );
+
+    saveCurrentSegments();
+
+    assert.equal(appState.videoFiles[0].segments.length, 2);
+    assert.deepEqual(
+        appState.videoFiles[0].segments.map((segment) => segment.id),
+        ['seg-1', 'seg-2']
+    );
+});
+
+test('resolveRegionUpdateBounds falls back to move logic when resize inference would still overlap', () => {
+    const { resolveRegionUpdateBounds } = createWaveformModule({}, ['resolveRegionUpdateBounds']);
+
+    const result = resolveRegionUpdateBounds(
+        { start: 4.2, end: 6.2 },
+        [
+            { id: 'next', start: 5, end: 8 }
+        ],
+        {
+            mode: 'resize-start',
+            minDuration: 0.1,
+            originalDuration: 2,
+            originalStart: 1,
+            originalEnd: 3
+        }
+    );
+
+    assert.equal(result.start, 3);
+    assert.equal(result.end, 5);
+});
+
+test('commitResolvedBounds applies corrected bounds immediately', () => {
+    const { commitResolvedBounds } = createWaveformModule({}, ['commitResolvedBounds']);
+    const applied = [];
+    const region = {
+        start: 4.2,
+        end: 6.2,
+        setOptions(bounds) {
+            applied.push(bounds);
+            this.start = bounds.start;
+            this.end = bounds.end;
+        }
+    };
+
+    const resolved = commitResolvedBounds(region, { start: 3, end: 5 });
+    assert.deepEqual(resolved, { start: 3, end: 5 });
+    assert.deepEqual(applied, [{ start: 3, end: 5 }]);
+    assert.equal(region.start, 3);
+    assert.equal(region.end, 5);
 });

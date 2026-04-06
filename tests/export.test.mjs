@@ -39,30 +39,52 @@ function createDocument() {
     };
 }
 
-function createFfmpegRecorder() {
+function createFfmpegRecorder(options = {}) {
     const execCalls = [];
+    const writeCalls = [];
+    let execIndex = 0;
 
     return {
         execCalls,
+        writeCalls,
         api: {
             async createDir() {},
             async mount() {},
             async unmount() {},
             async deleteDir() {},
             async deleteFile() {},
-            async writeFile() {},
+            async writeFile(path, data) {
+                writeCalls.push({
+                    path,
+                    data: typeof data === 'string' ? data : String(data)
+                });
+            },
             async readFile() {
                 return new Uint8Array([1, 2, 3]);
             },
             async exec(args) {
                 execCalls.push([...args]);
+                if (typeof options.execResult === 'function') {
+                    return options.execResult(args, execIndex++);
+                }
+                if (Array.isArray(options.execResults)) {
+                    return options.execResults[execIndex++] ?? 0;
+                }
+                execIndex++;
                 return 0;
             }
         }
     };
 }
 
-test('merge export builds one concat filter graph from source inputs', async () => {
+function createTestConsole() {
+    return {
+        ...console,
+        error() {}
+    };
+}
+
+test('merge export uses stream-copy extraction and concat copy', async () => {
     const document = createDocument();
     const ffmpeg = createFfmpegRecorder();
     const downloads = [];
@@ -85,7 +107,7 @@ test('merge export builds one concat filter graph from source inputs', async () 
             switchToVideo() {},
             document,
             window: {},
-            console,
+            console: createTestConsole(),
             setTimeout
         },
         ['executeSmartVideoExport']
@@ -103,19 +125,28 @@ test('merge export builds one concat filter graph from source inputs', async () 
     );
 
     assert.equal(downloads.length, 1);
-    assert.equal(ffmpeg.execCalls.length, 1);
+    assert.equal(ffmpeg.execCalls.length, 3);
 
-    const command = ffmpeg.execCalls[0];
-    const filterIndex = command.indexOf('-filter_complex');
-    assert.notEqual(filterIndex, -1);
-    assert.match(command[filterIndex + 1], /trim=start=1:end=3/);
-    assert.match(command[filterIndex + 1], /atrim=start=4:end=7/);
-    assert.match(command[filterIndex + 1], /concat=n=2:v=1:a=1/);
+    const [firstExtract, secondExtract, finalMerge] = ffmpeg.execCalls;
+    assert.ok(firstExtract.includes('-c:a'));
+    assert.ok(firstExtract.includes('copy'));
+    assert.equal(firstExtract[firstExtract.indexOf('-c:v') + 1], 'copy');
+    assert.equal(secondExtract[secondExtract.indexOf('-c:v') + 1], 'copy');
+    assert.ok(finalMerge.includes('-f'));
+    assert.ok(finalMerge.includes('concat.ffconcat'));
+    assert.equal(finalMerge[finalMerge.indexOf('-c') + 1], 'copy');
+    assert.equal(ffmpeg.writeCalls[0]?.path, 'concat.ffconcat');
+    assert.match(ffmpeg.writeCalls[0]?.data ?? '', /ffconcat version 1\.0/);
+    assert.match(ffmpeg.writeCalls[0]?.data ?? '', /file 'temp_merge_0\.mp4'/);
+    assert.match(ffmpeg.writeCalls[0]?.data ?? '', /duration 2\b/);
+    assert.match(ffmpeg.writeCalls[0]?.data ?? '', /file 'temp_merge_1\.mp4'/);
+    assert.match(ffmpeg.writeCalls[0]?.data ?? '', /duration 3\b/);
 });
 
-test('merge export reuses mounted inputs instead of encoding temp fragments', async () => {
+test('merge export fails fast when stream-copy concat fails', async () => {
     const document = createDocument();
-    const ffmpeg = createFfmpegRecorder();
+    const ffmpeg = createFfmpegRecorder({ execResults: [0, 0, 1] });
+    const downloads = [];
     const appState = {
         ffmpeg: ffmpeg.api,
         videoFiles: [],
@@ -126,14 +157,16 @@ test('merge export reuses mounted inputs instead of encoding temp fragments', as
         path.resolve('js/export.js'),
         {
             AppState: appState,
-            downloadBlob() {},
+            downloadBlob(blob, filename) {
+                downloads.push({ blob, filename });
+            },
             audioBufferToWav() {},
             saveCurrentSegments() {},
             addRegionAtTime() {},
             switchToVideo() {},
             document,
             window: {},
-            console,
+            console: createTestConsole(),
             setTimeout
         },
         ['executeSmartVideoExport']
@@ -149,6 +182,56 @@ test('merge export reuses mounted inputs instead of encoding temp fragments', as
         true
     );
 
-    assert.equal(ffmpeg.execCalls.length, 1);
-    assert.ok(ffmpeg.execCalls[0].includes('/input_0/demo.mp4'));
+    assert.equal(ffmpeg.execCalls.length, 3);
+    assert.equal(downloads.length, 0);
+    assert.equal(document.getElementById('tty').innerHTML.includes('视频合并失败'), true);
+    assert.equal(ffmpeg.execCalls.some((command) => command.includes('-filter_complex')), false);
+});
+
+test('merge export does not probe duration or re-encode after successful concat copy', async () => {
+    const document = createDocument();
+    const ffmpeg = createFfmpegRecorder({ execResults: [0, 0, 0] });
+    const downloads = [];
+    const appState = {
+        ffmpeg: ffmpeg.api,
+        videoFiles: [],
+        currentVideoIndex: 0
+    };
+
+    const { executeSmartVideoExport } = loadModule(
+        path.resolve('js/export.js'),
+        {
+            AppState: appState,
+            downloadBlob(blob, filename) {
+                downloads.push({ blob, filename });
+            },
+            audioBufferToWav() {},
+            saveCurrentSegments() {},
+            addRegionAtTime() {},
+            switchToVideo() {},
+            document,
+            window: {
+                __probeVideoDuration: async () => {
+                    throw new Error('duration probe should not be called');
+                }
+            },
+            console: createTestConsole(),
+            setTimeout
+        },
+        ['executeSmartVideoExport']
+    );
+
+    const sourceFile = { name: 'demo.mp4' };
+    await executeSmartVideoExport(
+        [
+            { start: 1, end: 3, videoFile: sourceFile },
+            { start: 4, end: 6, videoFile: sourceFile }
+        ],
+        [],
+        true
+    );
+
+    assert.equal(ffmpeg.execCalls.length, 3);
+    assert.equal(downloads.length, 1);
+    assert.equal(ffmpeg.execCalls.some((command) => command.includes('-filter_complex')), false);
 });

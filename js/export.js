@@ -36,91 +36,76 @@ async function safeUnmountDir(path) {
     } catch (e) {}
 }
 
-const MERGE_OUTPUT_EXT = 'mp4';
-const MERGE_PRIMARY_VIDEO_ARGS = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
-const MERGE_FALLBACK_VIDEO_ARGS = ['-c:v', 'mpeg4', '-q:v', '2'];
-const MERGE_AUDIO_ARGS = ['-c:a', 'aac', '-b:a', '192k'];
-
-async function buildMergeInputs(segmentsWithFiles, mountFile) {
-    const orderedFiles = [];
-    const seen = new Set();
-
-    for (const seg of segmentsWithFiles) {
-        if (!seen.has(seg.videoFile)) {
-            seen.add(seg.videoFile);
-            orderedFiles.push(seg.videoFile);
-        }
-    }
-
-    return Promise.all(orderedFiles.map(async (file, index) => ({
-        file,
-        inputIndex: index,
-        inputPath: await mountFile(file)
-    })));
-}
-
-function buildMergeFilterGraph(segments, inputIndexByFile) {
-    const parts = [];
-    const concatInputs = [];
-
-    segments.forEach((seg, index) => {
-        const inputIndex = inputIndexByFile.get(seg.videoFile);
-        const videoLabel = `v${index}`;
-        const audioLabel = `a${index}`;
-
-        if (inputIndex === undefined) {
-            return;
-        }
-
-        parts.push(
-            `[${inputIndex}:v:0]trim=start=${seg.start}:end=${seg.end},setpts=PTS-STARTPTS[${videoLabel}]`
-        );
-        parts.push(
-            `[${inputIndex}:a:0]atrim=start=${seg.start}:end=${seg.end},asetpts=PTS-STARTPTS[${audioLabel}]`
-        );
-        concatInputs.push(`[${videoLabel}][${audioLabel}]`);
-    });
-
-    parts.push(`${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=1[v][a]`);
-    return parts.join(';');
-}
-
-function buildFinalMergeArgs(inputPaths, filterGraph, outputName, videoArgs) {
+function buildCopySegmentArgs(inputPath, seg, outputName) {
     return [
-        ...inputPaths.flatMap((inputPath) => ['-i', inputPath]),
-        '-filter_complex', filterGraph,
-        '-map', '[v]',
-        '-map', '[a]',
-        ...videoArgs,
-        ...MERGE_AUDIO_ARGS,
-        '-movflags', '+faststart',
+        '-ss', seg.start.toString(),
+        '-t', Math.max(0.001, seg.end - seg.start).toString(),
+        '-i', inputPath,
+        '-c:v', 'copy',
+        '-c:a', 'copy',
+        '-avoid_negative_ts', 'make_zero',
+        '-map_metadata', '0',
         outputName
     ];
 }
 
-async function mergeEncodedSegments(inputPaths, filterGraph, outputName) {
-    const profiles = [
-        { label: 'H.264/AAC', videoArgs: MERGE_PRIMARY_VIDEO_ARGS },
-        { label: 'MPEG4/AAC', videoArgs: MERGE_FALLBACK_VIDEO_ARGS }
-    ];
+async function extractCopySegments(segmentsWithFiles, mountFile, outputExt, tempOutputFiles) {
+    const tempNames = [];
 
-    for (let i = 0; i < profiles.length; i++) {
-        const profile = profiles[i];
-        const args = buildFinalMergeArgs(inputPaths, filterGraph, outputName, profile.videoArgs);
-        log(`[合并视频 | ${profile.label}]: ffmpeg ${args.join(' ')}`, true);
+    for (let index = 0; index < segmentsWithFiles.length; index++) {
+        const seg = segmentsWithFiles[index];
+        const inputPath = await mountFile(seg.videoFile);
+        if (!inputPath) {
+            return null;
+        }
+
+        const tempName = `temp_merge_${index}.${outputExt}`;
+        tempOutputFiles.add(tempName);
+
+        const args = buildCopySegmentArgs(inputPath, seg, tempName);
+        log(`[提取分段 ${index + 1} | 流复制]: ffmpeg ${args.join(' ')}`, true);
 
         const err = await AppState.ffmpeg.exec(args);
-        if (err === 0) {
-            return true;
+        if (err !== 0) {
+            return null;
         }
 
-        await safeDeleteFile(outputName);
-        if (i < profiles.length - 1) {
-            log('最终合并失败，尝试备用编码配置...', true);
-        }
+        tempNames.push(tempName);
     }
 
-    return false;
+    return tempNames;
+}
+
+function buildConcatManifest(tempNames, segments) {
+    const lines = ['ffconcat version 1.0', ''];
+
+    tempNames.forEach((tempName, index) => {
+        const seg = segments[index];
+        lines.push(`file '${tempName}'`);
+        lines.push(`duration ${Math.max(0.001, seg.end - seg.start)}`);
+    });
+
+    return `${lines.join('\n')}\n`;
+}
+
+async function mergeCopiedSegments(tempNames, segmentsWithFiles, outputName, tempOutputFiles) {
+    const concatText = buildConcatManifest(tempNames, segmentsWithFiles);
+    const concatListName = 'concat.ffconcat';
+
+    tempOutputFiles.add(concatListName);
+    await AppState.ffmpeg.writeFile(concatListName, concatText);
+
+    const args = [
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concatListName,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        outputName
+    ];
+    log(`[合并视频 | 流复制]: ffmpeg ${args.join(' ')}`, true);
+
+    return AppState.ffmpeg.exec(args);
 }
 
 export async function processAudioExport(file, segments, indices) {
@@ -201,7 +186,7 @@ export async function executeSmartVideoExport(segmentsWithFiles, indicesArray, i
 
     try {
         const sourceExt = segmentsWithFiles[0].videoFile.name.split('.').pop() || 'mp4';
-        const outputExt = isMerge ? MERGE_OUTPUT_EXT : sourceExt;
+        const outputExt = sourceExt;
         let mountCounter = 0;
         
         const mountFile = async (file) => {
@@ -252,32 +237,24 @@ export async function executeSmartVideoExport(segmentsWithFiles, indicesArray, i
             }
             log('视频批量导出完成！', true);
         } else {
-            let outputName = null;
+            const outputName = `merged_${Date.now()}.${outputExt}`;
+            tempOutputFiles.add(outputName);
+            log('合并导出仅使用流复制分段与拼接，不进行重编码。', true);
+            const copiedSegments = await extractCopySegments(segmentsWithFiles, mountFile, outputExt, tempOutputFiles);
 
-            log('合并导出将直接从源文件裁剪并在一次最终编码中完成拼接。', true);
-            log('这样可以减少中间文件读写，并保留稳定的重新建时轴流程。', true);
-
-            const mergeInputs = await buildMergeInputs(segmentsWithFiles, mountFile);
-            const usableInputs = mergeInputs.filter(({ inputPath }) => Boolean(inputPath));
-            if (usableInputs.length === 0) {
-                throw new Error('没有成功挂载任何输入文件！');
+            if (!copiedSegments || copiedSegments.length !== segmentsWithFiles.length) {
+                throw new Error('视频分段提取失败');
             }
 
-            const inputIndexByFile = new Map(usableInputs.map(({ file, inputIndex }) => [file, inputIndex]));
-            const inputPaths = usableInputs.map(({ inputPath }) => inputPath);
-            const filterGraph = buildMergeFilterGraph(segmentsWithFiles, inputIndexByFile);
-
-            log('正在合并片段...', true);
-            outputName = `merged_${Date.now()}.${outputExt}`;
-            tempOutputFiles.add(outputName);
-
-            if (await mergeEncodedSegments(inputPaths, filterGraph, outputName)) {
-                const data = await AppState.ffmpeg.readFile(outputName);
-                downloadBlob(new Blob([data.buffer], { type: "application/octet-stream" }), `merged_${Math.floor(Date.now()/1000)}.${outputExt}`);
-                log('视频合并成功！', true);
-            } else {
+            const copyMergeErr = await mergeCopiedSegments(copiedSegments, segmentsWithFiles, outputName, tempOutputFiles);
+            if (copyMergeErr !== 0) {
                 throw new Error('视频合并失败');
             }
+
+            const data = await AppState.ffmpeg.readFile(outputName);
+            const mergedBlob = new Blob([data.buffer], { type: "application/octet-stream" });
+            downloadBlob(mergedBlob, `merged_${Math.floor(Date.now()/1000)}.${outputExt}`);
+            log('视频合并成功！', true);
         }
     } catch (err) {
         log(`[异常] ${err.message || err}`);

@@ -1,7 +1,7 @@
 import { AppState } from './state.js';
-import { initDB, saveWorkspace, loadWorkspace } from './database.js';
+import { initDB } from './database.js';
 import { downloadSrt, downloadBilingualSrt } from './utils.js';
-import { renderAllSegments, saveCurrentSegments, addRegionAtTime, setSwitchToVideoCallback, resetZoom } from './waveform.js';
+import { setSwitchToVideoCallback, resetZoom } from './waveform.js';
 import { updateTranscriptionHighlight, renderTranscriptionText, initTranscriptionCallbacks, setSelectionMode, clearPendingSelections, confirmPendingSelections, resetTranscriptionState } from './transcription.js';
 import { switchToVideo, renderVideoList, handleFileSelect, clearAllSegments, resetWorkspace } from './video.js';
 import { updateTranscribeStatus, connectToServer, transcribeVideo } from './websocket.js';
@@ -291,7 +291,7 @@ async function initApp() {
     
     loadFFmpeg().catch(err => log(`[错误] FFmpeg 加载失败: ${err.message}`));
     
-    try { connectToServer(); } catch (err) {}
+    updateTranscribeStatus();
     if (window.lucide) window.lucide.createIcons();
 }
 

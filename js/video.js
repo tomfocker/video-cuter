@@ -1,5 +1,5 @@
 import { AppState } from './state.js';
-import { initWaveSurfer, renderAllSegments, saveCurrentSegments } from './waveform.js';
+import { initWaveSurfer, renderAllSegments } from './waveform.js';
 import { updateTranscriptionHighlight, renderTranscriptionText } from './transcription.js';
 import { escapeHTML } from './utils.js';
 
