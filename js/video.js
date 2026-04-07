@@ -1,6 +1,7 @@
 import { AppState } from './state.js';
 import { initWaveSurfer, renderAllSegments } from './waveform.js';
 import { updateTranscriptionHighlight, renderTranscriptionText } from './transcription.js';
+import { updateTranscribeStatus } from './websocket.js';
 import { escapeHTML } from './utils.js';
 
 function clearTranscriptionUI() {
@@ -16,11 +17,13 @@ function clearTranscriptionUI() {
     const transcriptionPanel = document.getElementById('transcriptionPanel');
     const transcriptionContent = document.getElementById('transcriptionContent');
     const transcriptionText = document.getElementById('transcriptionText');
+    const downloadSrtBtn = document.getElementById('downloadSrtBtn');
     const downloadBilingualSrtBtn = document.getElementById('downloadBilingualSrtBtn');
 
     if (transcriptionPanel) transcriptionPanel.classList.add('hidden');
     if (transcriptionContent) transcriptionContent.classList.add('hidden');
     if (transcriptionText) transcriptionText.textContent = '';
+    if (downloadSrtBtn) downloadSrtBtn.classList.remove('hidden');
     if (downloadBilingualSrtBtn) downloadBilingualSrtBtn.classList.add('hidden');
 }
 
@@ -55,7 +58,6 @@ export function switchToVideo(idx) {
     document.getElementById('currentVideoIndicator').classList.remove('hidden');
     initWaveSurfer(v.objectURL, v.segments);
     renderVideoList();
-    document.getElementById('transcribeBtn').disabled = true;
     if (AppState.transcriptionResults[idx]) {
         AppState.transcriptionResult = AppState.transcriptionResults[idx];
         document.getElementById('transcriptionPanel').classList.remove('hidden');
@@ -65,6 +67,7 @@ export function switchToVideo(idx) {
         document.getElementById('transcriptionPanel').classList.add('hidden');
         document.getElementById('transcriptionContent').classList.add('hidden');
     }
+    updateTranscribeStatus();
 }
 
 export function renderVideoList() {
@@ -140,7 +143,11 @@ export function handleFileSelect(files) {
         document.getElementById('uploadSection').classList.add('hidden');
         document.getElementById('workspace').classList.remove('hidden');
         if (AppState.currentVideoIndex === -1) switchToVideo(0);
-        else { renderVideoList(); renderAllSegments(); }
+        else {
+            renderVideoList();
+            renderAllSegments();
+            updateTranscribeStatus();
+        }
     }
 }
 
@@ -172,4 +179,5 @@ export function resetWorkspace() {
     document.getElementById('workspace').classList.add('hidden');
     document.getElementById('uploadSection').classList.remove('hidden');
     document.getElementById('currentVideoIndicator').classList.add('hidden');
+    updateTranscribeStatus();
 }

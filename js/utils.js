@@ -22,8 +22,31 @@ export function formatSrtTime(seconds) {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
 }
 
+function getRenderableChunks(transcriptionResult) {
+    if (!transcriptionResult) return [];
+    if (Array.isArray(transcriptionResult.displayChunks) && transcriptionResult.displayChunks.length > 0) {
+        return transcriptionResult.displayChunks;
+    }
+    if (Array.isArray(transcriptionResult.chunks) && transcriptionResult.chunks.length > 0) {
+        return transcriptionResult.chunks;
+    }
+    return [];
+}
+
 export function generateSrtContent(transcriptionResult) {
-    if (!transcriptionResult || !transcriptionResult.chunks || transcriptionResult.chunks.length === 0) return null;
+    const chunks = getRenderableChunks(transcriptionResult);
+    if (chunks.length === 0) return null;
+
+    const hasSubtitleStyleChunks = Array.isArray(transcriptionResult?.displayChunks) && transcriptionResult.displayChunks.length > 0;
+    if (hasSubtitleStyleChunks) {
+        return chunks
+            .filter((chunk) => chunk?.text && Array.isArray(chunk.timestamp))
+            .map((chunk, index) => {
+                const [start, end] = chunk.timestamp;
+                return `${index + 1}\n${formatSrtTime(start)} --> ${formatSrtTime(end)}\n${chunk.text.trim()}\n`;
+            })
+            .join('\n');
+    }
     
     let srtContent = '';
     let subtitleIndex = 1;
@@ -51,18 +74,18 @@ export function generateSrtContent(transcriptionResult) {
         currentStart = null;
     };
     
-    transcriptionResult.chunks.forEach((chunk, idx) => {
+    chunks.forEach((chunk, idx) => {
         const text = chunk.text || '';
         const start = chunk.timestamp[0];
         const end = chunk.timestamp[1];
         
-        if (!currentStart) currentStart = start;
+        if (currentStart === null) currentStart = start;
         currentEnd = end;
         currentText += text;
         
         const shouldFlush = punctChars.includes(text) || 
                            currentText.length >= maxChars || 
-                           idx === transcriptionResult.chunks.length - 1;
+                           idx === chunks.length - 1;
         
         if (shouldFlush) {
             flushSubtitle();
@@ -70,6 +93,13 @@ export function generateSrtContent(transcriptionResult) {
     });
     
     return srtContent;
+}
+
+export function resolveSrtContent(transcriptionResult) {
+    if (transcriptionResult?.srt) {
+        return transcriptionResult.srt;
+    }
+    return generateSrtContent(transcriptionResult);
 }
 
 export function downloadBlob(blob, filename) {
@@ -84,7 +114,7 @@ export function downloadBlob(blob, filename) {
 }
 
 export function downloadSrt(transcriptionResult) {
-    const srtContent = generateSrtContent(transcriptionResult);
+    const srtContent = resolveSrtContent(transcriptionResult);
     if (!srtContent) { console.log('没有可用的字幕内容'); return; }
     downloadBlob(new Blob([srtContent], { type: 'text/plain;charset=utf-8' }), `subtitle_${Date.now()}.srt`);
     console.log('SRT 字幕文件已下载');

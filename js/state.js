@@ -1,3 +1,16 @@
+function resolveDefaultServerApiUrl() {
+    const hasWindow = typeof window !== 'undefined';
+    const configured = hasWindow ? window.__CUT_CONFIG__?.serverApiUrl : undefined;
+    if (configured !== undefined) {
+        return configured;
+    }
+
+    const saved = localStorage.getItem('serverApiUrl');
+    if (saved) return saved;
+
+    return 'http://127.0.0.1:8000';
+}
+
 export const AppState = {
     lastProgressLog: 0,
     pendingSelections: [],
@@ -20,8 +33,10 @@ export const AppState = {
     currentZoom: 1,
     deletionMap: new Set(),
     savedWorkspaceData: null,
+    serverReady: false,
+    serverInfo: null,
     
-    serverApiUrl: localStorage.getItem('serverApiUrl') || 'ws://127.0.0.1:6006',
+    serverApiUrl: resolveDefaultServerApiUrl(),
     llmConfig: {
         apiUrl: localStorage.getItem('llmApiUrl') || 'https://api.openai.com/v1',
         apiKey: localStorage.getItem('llmApiKey') || '',

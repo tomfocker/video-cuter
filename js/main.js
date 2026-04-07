@@ -4,7 +4,7 @@ import { downloadSrt, downloadBilingualSrt } from './utils.js';
 import { setSwitchToVideoCallback, resetZoom } from './waveform.js';
 import { updateTranscriptionHighlight, renderTranscriptionText, initTranscriptionCallbacks, setSelectionMode, clearPendingSelections, confirmPendingSelections, resetTranscriptionState } from './transcription.js';
 import { switchToVideo, renderVideoList, handleFileSelect, clearAllSegments, resetWorkspace } from './video.js';
-import { updateTranscribeStatus, connectToServer, transcribeVideo } from './websocket.js';
+import { updateTranscribeStatus, connectToServer, transcribeVideo, renderServerHelp } from './websocket.js';
 import { callLLM, removeFillerWords, translateToBilingual } from './llm.js';
 import { processAudioExport, processMergeAudioExport, executeSmartVideoExport } from './export.js';
 
@@ -65,6 +65,9 @@ async function initApp() {
     const serverApiInput = document.getElementById('serverApiInput');
     const testConnectionBtn = document.getElementById('testConnectionBtn');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const serverPresetProxyBtn = document.getElementById('serverPresetProxyBtn');
+    const serverPresetLocalBtn = document.getElementById('serverPresetLocalBtn');
+    const serverPresetBundleBtn = document.getElementById('serverPresetBundleBtn');
     const llmSettingsBtn = document.getElementById('llmSettingsBtn');
     const llmSettingsModal = document.getElementById('llmSettingsModal');
     const closeLlmSettingsBtn = document.getElementById('closeLlmSettingsBtn');
@@ -77,6 +80,7 @@ async function initApp() {
     const llmConnectionStatus = document.getElementById('llmConnectionStatus');
     const removeFillerBtn = document.getElementById('removeFillerBtn');
     const translateBtn = document.getElementById('translateBtn');
+    const clearTranscriptionBtn = document.getElementById('clearTranscriptionBtn');
     const downloadBilingualSrtBtn = document.getElementById('downloadBilingualSrtBtn');
     const downloadSrtBtn = document.getElementById('downloadSrtBtn');
     const clearPendingSelectionsBtn = document.getElementById('clearPendingSelectionsBtn');
@@ -92,19 +96,6 @@ async function initApp() {
     
     // 初始化 Lucide 图标
     if (window.lucide) window.lucide.createIcons();
-
-    // 拦截 PRO 功能
-    document.querySelectorAll('.pro-feature').forEach(btn => {
-        btn.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const proModal = document.getElementById('proFeatureModal');
-            if (proModal) {
-                proModal.classList.remove('hidden');
-                if (window.lucide) window.lucide.createIcons();
-            }
-        };
-    });
 
     // 绑定上传逻辑
     if (uploadSection) {
@@ -134,19 +125,46 @@ async function initApp() {
     // 设置界面逻辑
     if (serverSettingsBtn) {
         serverSettingsBtn.addEventListener('click', () => {
-            serverApiInput.value = AppState.serverApiUrl;
-            document.getElementById('connectionStatus').classList.add('hidden');
-            serverSettingsModal.classList.remove('hidden');
+            if (serverApiInput) serverApiInput.value = AppState.serverApiUrl;
+            const connectionStatus = document.getElementById('connectionStatus');
+            if (connectionStatus) connectionStatus.classList.add('hidden');
+            renderServerHelp(AppState.serverApiUrl);
+            if (serverSettingsModal) serverSettingsModal.classList.remove('hidden');
         });
     }
     
-    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => serverSettingsModal.classList.add('hidden'));
+    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => {
+        if (serverSettingsModal) serverSettingsModal.classList.add('hidden');
+    });
+    if (serverApiInput) {
+        serverApiInput.addEventListener('input', (event) => {
+            renderServerHelp(event.target.value);
+        });
+    }
+    if (serverPresetProxyBtn) {
+        serverPresetProxyBtn.addEventListener('click', () => {
+            if (serverApiInput) serverApiInput.value = '/api/asr';
+            renderServerHelp('/api/asr');
+        });
+    }
+    if (serverPresetLocalBtn) {
+        serverPresetLocalBtn.addEventListener('click', () => {
+            if (serverApiInput) serverApiInput.value = 'http://127.0.0.1:8000';
+            renderServerHelp('http://127.0.0.1:8000');
+        });
+    }
+    if (serverPresetBundleBtn) {
+        serverPresetBundleBtn.addEventListener('click', () => {
+            if (serverApiInput) serverApiInput.value = 'http://127.0.0.1:18000';
+            renderServerHelp('http://127.0.0.1:18000');
+        });
+    }
     if (testConnectionBtn) testConnectionBtn.addEventListener('click', connectToServer);
     if (saveSettingsBtn) {
         saveSettingsBtn.addEventListener('click', () => {
-            const url = serverApiInput.value.trim();
+            const url = serverApiInput?.value.trim();
             if (url) { AppState.serverApiUrl = url; localStorage.setItem('serverApiUrl', url); }
-            serverSettingsModal.classList.add('hidden');
+            if (serverSettingsModal) serverSettingsModal.classList.add('hidden');
             connectToServer();
         });
     }
@@ -200,6 +218,23 @@ async function initApp() {
 
     if (removeFillerBtn) removeFillerBtn.addEventListener('click', removeFillerWords);
     if (translateBtn) translateBtn.addEventListener('click', translateToBilingual);
+    if (clearTranscriptionBtn) {
+        clearTranscriptionBtn.addEventListener('click', () => {
+            if (AppState.currentVideoIndex >= 0) {
+                delete AppState.transcriptionResults[AppState.currentVideoIndex];
+            }
+            AppState.transcriptionResult = null;
+            AppState.bilingualSrtContent = null;
+            resetTranscriptionState();
+            const transcriptionPanel = document.getElementById('transcriptionPanel');
+            const transcriptionContent = document.getElementById('transcriptionContent');
+            const transcriptionText = document.getElementById('transcriptionText');
+            if (transcriptionPanel) transcriptionPanel.classList.add('hidden');
+            if (transcriptionContent) transcriptionContent.classList.add('hidden');
+            if (transcriptionText) transcriptionText.textContent = '';
+            if (downloadBilingualSrtBtn) downloadBilingualSrtBtn.classList.add('hidden');
+        });
+    }
     if (downloadBilingualSrtBtn) downloadBilingualSrtBtn.addEventListener('click', () => downloadBilingualSrt(AppState.bilingualSrtContent));
     if (downloadSrtBtn) downloadSrtBtn.addEventListener('click', () => downloadSrt(AppState.transcriptionResult));
     
@@ -291,6 +326,7 @@ async function initApp() {
     
     loadFFmpeg().catch(err => log(`[错误] FFmpeg 加载失败: ${err.message}`));
     
+    connectToServer();
     updateTranscribeStatus();
     if (window.lucide) window.lucide.createIcons();
 }

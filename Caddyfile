@@ -1,0 +1,29 @@
+:8000 {
+  encode gzip
+
+  handle_path /api/asr/* {
+    reverse_proxy {$CUT_ASR_UPSTREAM}
+  }
+
+  handle /healthz {
+    reverse_proxy {$CUT_ASR_UPSTREAM}
+  }
+
+  handle /v1/audio/transcriptions {
+    reverse_proxy {$CUT_ASR_UPSTREAM}
+  }
+
+  handle /api/transcriptions {
+    reverse_proxy {$CUT_ASR_UPSTREAM}
+  }
+
+  handle /config.js {
+    root * /srv
+    file_server
+  }
+
+  handle {
+    root * /srv
+    file_server
+  }
+}

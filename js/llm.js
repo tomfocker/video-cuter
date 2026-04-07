@@ -1,7 +1,17 @@
 import { AppState } from './state.js';
-import { escapeHTML, generateSrtContent } from './utils.js';
+import { escapeHTML, resolveSrtContent } from './utils.js';
 import { highlightRegionAtTime, clearHighlightRegion, addRegionAtTime, renderAllSegments } from './waveform.js';
 import { renderTranscriptionText, updateTranscriptionHighlight } from './transcription.js';
+
+function getRenderableChunks() {
+    if (Array.isArray(AppState.transcriptionResult?.displayChunks) && AppState.transcriptionResult.displayChunks.length > 0) {
+        return AppState.transcriptionResult.displayChunks;
+    }
+    if (Array.isArray(AppState.transcriptionResult?.chunks) && AppState.transcriptionResult.chunks.length > 0) {
+        return AppState.transcriptionResult.chunks;
+    }
+    return [];
+}
 
 export async function callLLM(prompt, systemPrompt = 'You are a helpful assistant.') {
     if (!AppState.llmConfig.apiKey) throw new Error('请先配置 LLM API Key');
@@ -17,14 +27,14 @@ export async function callLLM(prompt, systemPrompt = 'You are a helpful assistan
 }
 
 export async function removeFillerWords() {
-    if (!AppState.transcriptionResult || !AppState.transcriptionResult.chunks || AppState.transcriptionResult.chunks.length === 0) { console.log('没有可用的语音识别内容'); return; }
+    const chunks = getRenderableChunks();
+    if (chunks.length === 0) { console.log('没有可用的语音识别内容'); return; }
     const removeFillerBtn = document.getElementById('removeFillerBtn');
     removeFillerBtn.disabled = true;
     removeFillerBtn.innerHTML = '<i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 处理中...';
     lucide.createIcons();
     
     try {
-        const chunks = AppState.transcriptionResult.chunks;
         const chunkTexts = chunks.map((c, idx) => `${idx}|${c.text}`).join('\n');
         const llmResponse = await callLLM(`请仔细分析以下按行编号的语音识别文本片段，只标记那些明显是纯粹语气词或填充词的片段。只返回需要删除的行号，用英文逗号分隔，如果没有需要删除的，返回 "NONE"。\n\n文本片段（格式：行号|文本）：\n${chunkTexts}`, '你是一个非常谨慎的文本编辑助手。');
         
@@ -46,14 +56,15 @@ export async function removeFillerWords() {
 }
 
 function renderMarkedTranscription() {
-    if (!AppState.transcriptionResult || !AppState.transcriptionResult.chunks) return;
+    const chunks = getRenderableChunks();
+    if (chunks.length === 0) return;
     const transcriptionText = document.getElementById('transcriptionText');
     let html = `<div class="text-cyan-300 mb-2 text-xs flex items-center gap-1"><i data-lucide="sparkles" class="w-3 h-3"></i>点击任意词可切换是否删除，确认后自动选择保留区域</div>`;
     html += `<div class="flex items-center gap-2 mb-2"><button id="confirmDeletionsBtn" class="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1 transition-colors"><i data-lucide="check" class="w-3 h-3"></i>确认删除并选择区域</button>`;
     html += `<button id="cancelMarksBtn" class="text-xs px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded flex items-center gap-1 transition-colors"><i data-lucide="x" class="w-3 h-3"></i>取消</button></div>`;
     html += `<div id="markedTranscriptionContainer" class="text-sm text-gray-200 leading-relaxed p-3 bg-gray-900/50 rounded max-h-48 overflow-y-auto">`;
     
-    AppState.transcriptionResult.chunks.forEach((chunk, idx) => {
+    chunks.forEach((chunk, idx) => {
         if (chunk.text) {
             const isDeleted = AppState.deletionMap.has(idx);
             html += `<span class="filler-token cursor-pointer hover:bg-purple-600/30 rounded px-0.5 select-none transition-colors ${isDeleted ? 'line-through text-red-400 bg-red-900/30' : ''}" data-start="${chunk.timestamp[0]}" data-end="${chunk.timestamp[1]}" data-idx="${idx}">${escapeHTML(chunk.text)}</span>`;
@@ -100,8 +111,8 @@ function renderMarkedTranscription() {
 }
 
 function confirmDeletions() {
-    if (!AppState.transcriptionResult || !AppState.transcriptionResult.chunks) return;
-    const chunks = AppState.transcriptionResult.chunks;
+    const chunks = getRenderableChunks();
+    if (chunks.length === 0) return;
     
     if (AppState.wsRegions) {
         AppState.wsRegions.getRegions().forEach(r => r.remove());
@@ -133,14 +144,14 @@ function confirmDeletions() {
 }
 
 export async function translateToBilingual() {
-    if (!AppState.transcriptionResult || !AppState.transcriptionResult.chunks || AppState.transcriptionResult.chunks.length === 0) { console.log('没有可用的语音识别内容'); return; }
+    if (getRenderableChunks().length === 0) { console.log('没有可用的语音识别内容'); return; }
     const translateBtn = document.getElementById('translateBtn');
     translateBtn.disabled = true;
     translateBtn.innerHTML = '<i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 翻译中...';
     lucide.createIcons();
     
     try {
-        const srtContent = generateSrtContent(AppState.transcriptionResult);
+        const srtContent = resolveSrtContent(AppState.transcriptionResult);
         if (!srtContent) throw new Error('无法生成 SRT 内容');
         const targetLang = AppState.llmConfig.targetLang;
         const translatedSrt = await callLLM(`请将以下 SRT 字幕翻译成${targetLang}，保持 SRT 格式不变。每一条字幕的内容部分要显示双语，格式为：原文\\n译文\n\nSRT 内容：\n${srtContent}`, `你是一个专业的字幕翻译助手。请将 SRT 字幕翻译成${targetLang}，并保持 SRT 格式不变。`);

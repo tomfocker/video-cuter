@@ -3,8 +3,19 @@ import { highlightRegionAtTime, clearHighlightRegion, addRegionAtTime, setWavefo
 import { clearAllSegments } from './video.js';
 import { escapeHTML } from './utils.js';
 
+function getRenderableChunks(result = AppState.transcriptionResult) {
+    if (!result) return [];
+    if (Array.isArray(result.displayChunks) && result.displayChunks.length > 0) {
+        return result.displayChunks;
+    }
+    if (Array.isArray(result.chunks) && result.chunks.length > 0) {
+        return result.chunks;
+    }
+    return [];
+}
+
 export function updateTranscriptionHighlight(previewRegion = null) {
-    if (!AppState.transcriptionResult || !AppState.transcriptionResult.chunks || !AppState.wsRegions) return;
+    if (!AppState.transcriptionResult || getRenderableChunks().length === 0 || !AppState.wsRegions) return;
     if (AppState.isResetState) return;
     
     const regions = AppState.wsRegions.getRegions();
@@ -50,15 +61,6 @@ export function toggleRegionAtTime(start, end) {
 }
 
 export function setSelectionMode(mode, skipConfirm = false) {
-    if (mode === 'exclude' && !skipConfirm) {
-        const excludeModeModal = document.getElementById('excludeModeModal');
-        if (excludeModeModal) {
-            excludeModeModal.classList.remove('hidden');
-            lucide.createIcons();
-        }
-        return;
-    }
-    
     AppState.selectionMode = mode;
     AppState.pendingPreviewRegion = null;
     AppState.isPreviewMode = false;
@@ -96,7 +98,7 @@ export function setSelectionMode(mode, skipConfirm = false) {
         
         if (transcriptionText) {
             const tokens = transcriptionText.querySelectorAll('.transcript-token');
-            tokens.forEach((token, idx) => {
+            tokens.forEach((token) => {
                 token.classList.add('bg-green-500/40', 'text-white');
                 token.classList.remove('bg-red-500/30', 'text-red-300', 'line-through', 'text-gray-200');
             });
@@ -293,14 +295,15 @@ export function renderTranscriptionText(result) {
     AppState.selectionMode = 'keep';
     updatePendingSelectionsUI();
     
-    if (!result.text && (!result.chunks || result.chunks.length === 0)) {
+    const chunks = getRenderableChunks(result);
+    if (!result.text && chunks.length === 0) {
         if (transcriptionText) transcriptionText.innerHTML = '<span class="text-gray-500">未识别到语音内容</span>';
         return;
     }
     
-    if (result.chunks && result.chunks.length > 0) {
+    if (chunks.length > 0) {
         let html = '';
-        result.chunks.forEach((chunk, idx) => {
+        chunks.forEach((chunk, idx) => {
             const text = chunk.text || '';
             const start = chunk.timestamp[0];
             const end = chunk.timestamp[1];
