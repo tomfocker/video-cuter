@@ -1,52 +1,6 @@
 import { AppState } from './state.js';
 import { initWaveSurfer, renderAllSegments } from './waveform.js';
-import { updateTranscriptionHighlight, renderTranscriptionText } from './transcription.js';
-import { updateTranscribeStatus } from './websocket.js';
 import { escapeHTML } from './utils.js';
-
-function clearTranscriptionUI() {
-    AppState.transcriptionResult = null;
-    AppState.bilingualSrtContent = null;
-    AppState.pendingSelections = [];
-    AppState.excludeSelections = [];
-    AppState.pendingPreviewRegion = null;
-    AppState.isPreviewMode = false;
-    AppState.isResetState = false;
-    AppState.deletionMap.clear();
-
-    const transcriptionPanel = document.getElementById('transcriptionPanel');
-    const transcriptionContent = document.getElementById('transcriptionContent');
-    const transcriptionText = document.getElementById('transcriptionText');
-    const downloadSrtBtn = document.getElementById('downloadSrtBtn');
-    const downloadBilingualSrtBtn = document.getElementById('downloadBilingualSrtBtn');
-
-    if (transcriptionPanel) transcriptionPanel.classList.add('hidden');
-    if (transcriptionContent) transcriptionContent.classList.add('hidden');
-    if (transcriptionText) transcriptionText.textContent = '';
-    if (downloadSrtBtn) downloadSrtBtn.classList.remove('hidden');
-    if (downloadBilingualSrtBtn) downloadBilingualSrtBtn.classList.add('hidden');
-}
-
-function removeTranscriptionResultAtIndex(idx) {
-    const nextResults = {};
-
-    Object.entries(AppState.transcriptionResults).forEach(([key, value]) => {
-        const numericKey = Number(key);
-
-        if (!Number.isInteger(numericKey)) {
-            nextResults[key] = value;
-            return;
-        }
-
-        if (numericKey < idx) {
-            nextResults[numericKey] = value;
-        } else if (numericKey > idx) {
-            nextResults[numericKey - 1] = value;
-        }
-    });
-
-    AppState.transcriptionResults = nextResults;
-}
 
 export function switchToVideo(idx) {
     if (idx < 0 || idx >= AppState.videoFiles.length) return;
@@ -58,16 +12,6 @@ export function switchToVideo(idx) {
     document.getElementById('currentVideoIndicator').classList.remove('hidden');
     initWaveSurfer(v.objectURL, v.segments);
     renderVideoList();
-    if (AppState.transcriptionResults[idx]) {
-        AppState.transcriptionResult = AppState.transcriptionResults[idx];
-        document.getElementById('transcriptionPanel').classList.remove('hidden');
-        renderTranscriptionText(AppState.transcriptionResults[idx]);
-    } else {
-        AppState.transcriptionResult = null;
-        document.getElementById('transcriptionPanel').classList.add('hidden');
-        document.getElementById('transcriptionContent').classList.add('hidden');
-    }
-    updateTranscribeStatus();
 }
 
 export function renderVideoList() {
@@ -105,7 +49,6 @@ window.removeVideo = (idx) => {
     }
 
     AppState.videoFiles.splice(idx, 1);
-    removeTranscriptionResultAtIndex(idx);
 
     if (AppState.videoFiles.length > 0) {
         switchToVideo(Math.min(idx, AppState.videoFiles.length - 1));
@@ -114,7 +57,6 @@ window.removeVideo = (idx) => {
         AppState.currentVideoIndex = -1;
         AppState.savedWorkspaceData = null;
         localStorage.removeItem('videoCutterWorkspace');
-        clearTranscriptionUI();
         document.getElementById('workspace').classList.add('hidden');
         document.getElementById('uploadSection').classList.remove('hidden');
     }
@@ -146,7 +88,6 @@ export function handleFileSelect(files) {
         else {
             renderVideoList();
             renderAllSegments();
-            updateTranscribeStatus();
         }
     }
 }
@@ -156,7 +97,6 @@ export function clearAllSegments() {
     AppState.wsRegions.getRegions().forEach(r => r.remove());
     AppState.videoFiles[AppState.currentVideoIndex].segments = [];
     renderAllSegments();
-    updateTranscriptionHighlight();
     console.log('已清空所有选区');
 }
 
@@ -170,14 +110,11 @@ export function resetWorkspace() {
     AppState.videoFiles = [];
     AppState.allSegments = [];
     AppState.currentVideoIndex = -1;
-    AppState.transcriptionResults = {};
     AppState.savedWorkspaceData = null;
     localStorage.removeItem('videoCutterWorkspace');
-    clearTranscriptionUI();
     document.getElementById('segmentsListContainer').innerHTML = '';
     document.getElementById('videoListContainer').innerHTML = '';
     document.getElementById('workspace').classList.add('hidden');
     document.getElementById('uploadSection').classList.remove('hidden');
     document.getElementById('currentVideoIndicator').classList.add('hidden');
-    updateTranscribeStatus();
 }

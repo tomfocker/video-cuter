@@ -36,7 +36,6 @@ export function saveCurrentSegments() {
 }
 
 let renderAllSegmentsCallback = null;
-let updateTranscriptionHighlightCallback = null;
 
 function inferRegionUpdateMode(region) {
     const dragStartState = region.dragStartState;
@@ -273,7 +272,6 @@ function buildSegmentCard(seg, index) {
 
 export function setWaveformCallbacks(callbacks) {
     if (callbacks.renderAllSegments) renderAllSegmentsCallback = callbacks.renderAllSegments;
-    if (callbacks.updateTranscriptionHighlight) updateTranscriptionHighlightCallback = callbacks.updateTranscriptionHighlight;
 }
 
 export function renderAllSegments() {
@@ -374,24 +372,6 @@ window.removeSegment = (vIdx, segId) => {
     }
 };
 
-export function highlightRegionAtTime(start, end) {
-    if (!AppState.wsRegions) return;
-    clearHighlightRegion();
-    const duration = AppState.wavesurfer.getDuration();
-    const safeStart = Math.max(0, Math.min(start, duration - 0.1));
-    const safeEnd = Math.max(safeStart + 0.1, Math.min(end, duration));
-    AppState.highlightRegion = AppState.wsRegions.addRegion({
-        start: safeStart, end: safeEnd, color: 'rgba(147, 51, 234, 0.2)', drag: false, resize: false, isHighlight: true
-    });
-}
-
-export function clearHighlightRegion() {
-    if (AppState.highlightRegion) {
-        AppState.highlightRegion.remove();
-        AppState.highlightRegion = null;
-    }
-}
-
 export function addRegionAtTime(start, end, color = 'rgba(147, 51, 234, 0.4)') {
     if (!AppState.wsRegions) return;
     const duration = AppState.wavesurfer.getDuration();
@@ -457,30 +437,17 @@ export function initWaveSurfer(url, savedSegments = []) {
             });
         }
         renderAllSegments();
-        document.getElementById('transcribeBtn').disabled = false;
     });
 
     AppState.wsRegions.on('region-created', (region) => {
-        if (region.isHighlight) return;
-        
         region.lastValidStart = region.start;
         region.lastValidEnd = region.end;
-        const hasTranscription = AppState.transcriptionResult && AppState.transcriptionResult.chunks && AppState.transcriptionResult.chunks.length > 0;
-        if (!region.isRestoring && hasTranscription) {
-            AppState.isPreviewMode = true;
-            AppState.pendingPreviewRegion = region;
-            if (updateTranscriptionHighlightCallback) updateTranscriptionHighlightCallback();
-        } else {
-            renderAllSegments();
-            if (window.saveCurrentWorkspace) window.saveCurrentWorkspace();
-        }
+        renderAllSegments();
+        if (window.saveCurrentWorkspace) window.saveCurrentWorkspace();
     });
     
     AppState.wsRegions.on('region-update', (region, side) => {
         beginRegionUpdateSession(region, side);
-        if (AppState.transcriptionResult && AppState.transcriptionResult.chunks && updateTranscriptionHighlightCallback) {
-            updateTranscriptionHighlightCallback({ start: region.start, end: region.end });
-        }
     });
     
     AppState.wsRegions.on('region-updated', (region, side) => {
@@ -498,22 +465,12 @@ export function initWaveSurfer(url, savedSegments = []) {
 
         commitResolvedBounds(region, snapped);
         endRegionUpdateSession(region);
-        if (!AppState.isPreviewMode) {
-            renderAllSegments();
-            if (AppState.transcriptionResult && AppState.transcriptionResult.chunks && updateTranscriptionHighlightCallback) {
-                updateTranscriptionHighlightCallback();
-            }
-            if (window.saveCurrentWorkspace) window.saveCurrentWorkspace();
-        }
+        renderAllSegments();
+        if (window.saveCurrentWorkspace) window.saveCurrentWorkspace();
     });
     
     AppState.wsRegions.on('region-removed', (region) => {
-        if (region && region.isHighlight) return;
-        
         renderAllSegments();
-        if (AppState.transcriptionResult && AppState.transcriptionResult.chunks && updateTranscriptionHighlightCallback) {
-            updateTranscriptionHighlightCallback();
-        }
         if (window.saveCurrentWorkspace) window.saveCurrentWorkspace();
     });
     AppState.wsRegions.on('region-clicked', (region, e) => { e.stopPropagation(); });

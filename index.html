@@ -147,64 +147,10 @@
                             </div>
 
                             <div class="mt-4 flex items-center justify-between gap-4">
-                                <div class="flex items-center gap-2">
-                                    <button id="transcribeBtn" class="text-xs px-4 py-2 bg-gray-700 hover:bg-indigo-600 text-gray-300 hover:text-white rounded-lg flex items-center gap-2 transition-all border border-gray-600">
-                                        <i data-lucide="mic" class="w-4 h-4"></i> 语音转文字
-                                    </button>
-                                    <button id="serverSettingsBtn" class="text-xs p-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors border border-gray-600" title="识别服务配置">
-                                        <i data-lucide="settings" class="w-4 h-4"></i>
-                                    </button>
+                                <div class="rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-3 py-2 text-[11px] text-indigo-100">
+                                    这里只保留纯浏览器剪辑能力。语音识别与字幕流程已拆分到独立仓库。
                                 </div>
-                                <div id="transcribeStatus" class="text-[10px] text-gray-500 italic"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 语音识别结果 (根据需要显示) -->
-                    <div id="transcriptionPanel" class="bg-gray-800 rounded-2xl shadow-lg border border-gray-700 p-5 hidden">
-                        <div class="flex items-center justify-between mb-4 gap-3">
-                            <h3 class="text-sm font-bold flex items-center gap-2 text-purple-400">
-                                <i data-lucide="message-square" class="w-4 h-4"></i> 语音识别内容
-                            </h3>
-                            <div class="flex items-center gap-2">
-                                <button id="llmSettingsBtn" class="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors flex items-center gap-1">
-                                    <i data-lucide="bot" class="w-3.5 h-3.5"></i> LLM 配置
-                                </button>
-                                <button id="clearTranscriptionBtn" class="text-xs text-gray-500 hover:text-red-400 flex items-center gap-1 transition-colors">
-                                    <i data-lucide="trash-2" class="w-3 h-3"></i> 清除结果
-                                </button>
-                            </div>
-                        </div>
-                        <div id="transcriptionLoading" class="hidden flex flex-col items-center justify-center py-8">
-                            <i data-lucide="loader-2" class="w-6 h-6 text-purple-500 animate-spin mb-3"></i>
-                            <span id="transcriptionLoadingText" class="text-xs text-purple-300">正在通过后端识别...</span>
-                            <div class="w-full max-w-xs bg-gray-700 rounded-full h-1 mt-4">
-                                <div id="whisperProgress" class="bg-purple-500 h-full transition-all duration-300" style="width: 0%"></div>
-                            </div>
-                        </div>
-                        <div id="transcriptionContent" class="hidden">
-                            <div id="transcriptionText" class="text-sm text-gray-300 leading-relaxed p-4 bg-gray-900/50 rounded-xl max-h-48 overflow-y-auto border border-gray-700/50"></div>
-
-                            <div class="mt-4 flex flex-wrap items-center gap-2 text-[10px]">
-                                <span class="text-gray-500">文字选区模式</span>
-                                <button id="keepModeBtn" class="text-xs px-3 py-1.5 bg-green-600 text-white rounded flex items-center gap-1 transition-colors">保留模式</button>
-                                <button id="excludeModeBtn" class="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded flex items-center gap-1 transition-colors">排除模式</button>
-                                <span id="pendingSelectionCount" class="hidden px-2 py-1 rounded-full bg-green-500/15 text-green-300 border border-green-500/20">待保留 <span>0</span></span>
-                                <span id="excludeSelectionCount" class="hidden px-2 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/20">待排除 <span>0</span></span>
-                            </div>
-
-                            <div class="flex flex-wrap items-center justify-between mt-4 gap-3">
-                                <div class="flex flex-wrap gap-2">
-                                    <button id="removeFillerBtn" class="text-xs px-3 py-1.5 bg-gray-700 hover:bg-amber-600 text-gray-300 rounded-lg transition-colors">智能去水词</button>
-                                    <button id="translateBtn" class="text-xs px-3 py-1.5 bg-gray-700 hover:bg-emerald-600 text-gray-300 rounded-lg transition-colors">双语翻译</button>
-                                    <button id="downloadSrtBtn" class="text-xs px-3 py-1.5 bg-gray-700 hover:bg-sky-600 text-gray-300 rounded-lg transition-colors">下载 SRT</button>
-                                    <button id="downloadBilingualSrtBtn" class="hidden text-xs px-3 py-1.5 bg-gray-700 hover:bg-cyan-600 text-gray-300 rounded-lg transition-colors">下载双语 SRT</button>
-                                </div>
-                                <div class="flex flex-wrap gap-2">
-                                    <button id="clearPendingSelectionsBtn" class="hidden text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors">清空待选</button>
-                                    <button id="resetTranscriptionBtn" class="text-xs px-3 py-1.5 bg-gray-700 hover:bg-rose-600 text-gray-300 rounded-lg transition-colors">重置选区</button>
-                                    <button id="confirmSelectionsBtn" class="hidden text-xs px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold shadow-lg shadow-indigo-500/20">确认添加选区</button>
-                                </div>
+                                <div class="text-[10px] text-gray-500 italic">拖拽波形创建片段，再到右侧导出</div>
                             </div>
                         </div>
                     </div>
@@ -296,90 +242,6 @@
         </div>
     </main>
 
-    <!-- 弹窗：识别服务配置 -->
-    <div id="serverSettingsModal" class="hidden fixed inset-0 bg-black/75 z-50 flex items-center justify-center backdrop-blur-sm p-4">
-        <div class="w-full max-w-lg rounded-2xl border border-gray-700 bg-gray-800 shadow-2xl">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-                <div>
-                    <h3 class="text-lg font-bold text-white">识别服务配置</h3>
-                    <p class="text-xs text-gray-400 mt-1">填写正在运行的 FunASR HTTP 地址。</p>
-                </div>
-                <button id="closeSettingsBtn" class="text-gray-400 hover:text-white transition-colors">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
-            </div>
-            <div class="px-6 py-5 space-y-4">
-                <label class="block">
-                    <span class="block text-xs text-gray-400 mb-2">服务地址</span>
-                    <input id="serverApiInput" type="text" class="w-full rounded-xl border border-gray-600 bg-gray-900 px-4 py-3 text-sm text-gray-100 outline-none focus:border-indigo-500" placeholder="http://127.0.0.1:8000">
-                </label>
-                <div class="space-y-2">
-                    <div class="text-xs text-gray-500">快速填充</div>
-                    <div class="flex flex-wrap gap-2">
-                        <button id="serverPresetProxyBtn" type="button" class="px-3 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-xs text-indigo-200 hover:bg-indigo-500/20 transition-colors">同源代理 /api/asr</button>
-                        <button id="serverPresetLocalBtn" type="button" class="px-3 py-1.5 rounded-full border border-gray-600 bg-gray-900 text-xs text-gray-200 hover:bg-gray-700 transition-colors">本机直连 127.0.0.1:8000</button>
-                        <button id="serverPresetBundleBtn" type="button" class="px-3 py-1.5 rounded-full border border-gray-600 bg-gray-900 text-xs text-gray-200 hover:bg-gray-700 transition-colors">Bundle 直连 127.0.0.1:18000</button>
-                    </div>
-                </div>
-                <div class="rounded-xl border border-gray-700 bg-gray-900/70 p-3 text-xs text-gray-400">
-                    如果你是通过 Docker bundle 打开的这个页面，优先使用：<code class="text-indigo-300">/api/asr</code><br>
-                    如果你是单独用静态服务器打开前端，再使用：<code class="text-indigo-300">http://127.0.0.1:8000</code> 或 <code class="text-indigo-300">http://127.0.0.1:18000</code>
-                </div>
-                <div class="rounded-xl border border-gray-700 bg-gray-900/70 p-3 text-xs text-gray-400 space-y-2">
-                    <div id="serverHelpSummary" class="text-gray-200">推荐先使用上面的快捷地址，再点击“测试连接”。</div>
-                    <ul id="serverHelpList" class="list-disc space-y-1 pl-4 text-gray-400">
-                        <li>浏览器里不要直接填写 <code class="text-indigo-300">asr:8000</code> 这类 Docker 服务名。</li>
-                    </ul>
-                </div>
-                <div id="connectionStatus" class="hidden text-xs text-center text-gray-400"></div>
-            </div>
-            <div class="px-6 py-4 border-t border-gray-700 flex justify-end gap-2">
-                <button id="testConnectionBtn" class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-200 transition-colors">测试连接</button>
-                <button id="saveSettingsBtn" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white transition-colors">保存并启用</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 弹窗：LLM 配置 -->
-    <div id="llmSettingsModal" class="hidden fixed inset-0 bg-black/75 z-50 flex items-center justify-center backdrop-blur-sm p-4">
-        <div class="w-full max-w-lg rounded-2xl border border-gray-700 bg-gray-800 shadow-2xl">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-                <div>
-                    <h3 class="text-lg font-bold text-white">LLM 配置</h3>
-                    <p class="text-xs text-gray-400 mt-1">用于智能去水词与双语字幕翻译。</p>
-                </div>
-                <button id="closeLlmSettingsBtn" class="text-gray-400 hover:text-white transition-colors">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
-            </div>
-            <div class="px-6 py-5 space-y-4">
-                <label class="block">
-                    <span class="block text-xs text-gray-400 mb-2">API 地址</span>
-                    <input id="llmApiUrl" type="text" class="w-full rounded-xl border border-gray-600 bg-gray-900 px-4 py-3 text-sm text-gray-100 outline-none focus:border-indigo-500" placeholder="https://api.openai.com/v1">
-                </label>
-                <label class="block">
-                    <span class="block text-xs text-gray-400 mb-2">API Key</span>
-                    <input id="llmApiKey" type="password" class="w-full rounded-xl border border-gray-600 bg-gray-900 px-4 py-3 text-sm text-gray-100 outline-none focus:border-indigo-500" placeholder="sk-...">
-                </label>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label class="block">
-                        <span class="block text-xs text-gray-400 mb-2">模型</span>
-                        <input id="llmModel" type="text" class="w-full rounded-xl border border-gray-600 bg-gray-900 px-4 py-3 text-sm text-gray-100 outline-none focus:border-indigo-500" placeholder="gpt-4o-mini">
-                    </label>
-                    <label class="block">
-                        <span class="block text-xs text-gray-400 mb-2">目标语言</span>
-                        <input id="llmTargetLang" type="text" class="w-full rounded-xl border border-gray-600 bg-gray-900 px-4 py-3 text-sm text-gray-100 outline-none focus:border-indigo-500" placeholder="中文">
-                    </label>
-                </div>
-                <div id="llmConnectionStatus" class="hidden text-xs text-center text-gray-400"></div>
-            </div>
-            <div class="px-6 py-4 border-t border-gray-700 flex justify-end gap-2">
-                <button id="testLlmConnectionBtn" class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-200 transition-colors">测试连接</button>
-                <button id="saveLlmSettingsBtn" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white transition-colors">保存配置</button>
-            </div>
-        </div>
-    </div>
-
     <!-- 加载层 -->
     <div id="processingOverlay" class="hidden fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center backdrop-blur-md">
         <div class="relative">
@@ -392,8 +254,6 @@
         <p class="text-gray-500 text-sm">浏览器正在调用 FFmpeg 内核，请勿刷新页面...</p>
     </div>
 
-    <!-- 脚本加载 -->
-    <script src="./config.js"></script>
     <script type="module">
         import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js';
         import RegionsPlugin from 'https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.esm.js';
