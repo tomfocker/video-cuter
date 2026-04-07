@@ -315,4 +315,6 @@ test('repository includes GitHub Pages deployment workflow and demo link', () =>
     assert.match(workflow, /actions\/deploy-pages@/);
     assert.match(readme, /https:\/\/tomfocker\.github\.io\/video-cuter\//);
     assert.match(readme, /GitHub Pages/i);
+    assert.match(readme, /Settings\s*>\s*Pages/i);
+    assert.match(readme, /GitHub Actions/i);
 });

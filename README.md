@@ -51,6 +51,13 @@ https://tomfocker.github.io/video-cuter/
 
 如果主分支刚更新，GitHub Pages 可能需要 1 到 3 分钟完成部署。
 
+如果这是仓库第一次启用 GitHub Pages，先到仓库的 `Settings > Pages` 确认：
+
+- Build and deployment 已启用
+- Source 选择为 `GitHub Actions`
+
+否则官方 Pages workflow 会在 `configure-pages` 步骤失败，演示地址会暂时返回 `404`。
+
 ### 1. 启动 ASR Docker 服务
 
 在 `yunyinshibie` 项目目录中启动：
