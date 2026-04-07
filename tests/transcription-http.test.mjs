@@ -304,3 +304,15 @@ test('Caddyfile exposes static app and proxied ASR endpoints for bundle deployme
     assert.match(caddyfile, /handle\s+\/api\/transcriptions/);
     assert.match(caddyfile, /reverse_proxy\s+\{\$CUT_ASR_UPSTREAM\}/);
 });
+
+test('repository includes GitHub Pages deployment workflow and demo link', () => {
+    const workflowPath = path.resolve('.github/workflows/pages.yml');
+    const workflow = fs.readFileSync(workflowPath, 'utf8');
+    const readme = fs.readFileSync(path.resolve('README.md'), 'utf8');
+
+    assert.match(workflow, /actions\/configure-pages@/);
+    assert.match(workflow, /actions\/upload-pages-artifact@/);
+    assert.match(workflow, /actions\/deploy-pages@/);
+    assert.match(readme, /https:\/\/tomfocker\.github\.io\/video-cuter\//);
+    assert.match(readme, /GitHub Pages/i);
+});

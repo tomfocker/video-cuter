@@ -2,6 +2,8 @@
 
 一个纯前端、本地处理的视频切片工具。现在已经可以直接对接本地运行的 FunASR HTTP 服务，在网页里完成：
 
+- 在线演示：`https://tomfocker.github.io/video-cuter/`
+
 - 上传视频
 - 浏览器端提取音频并转录
 - 按识别文字生成/排除剪辑选区
@@ -38,6 +40,16 @@
 - 本地保存工作区状态，刷新后可恢复同名素材的片段信息
 
 ## 快速开始
+
+### 在线体验
+
+GitHub Pages 演示地址：
+
+```text
+https://tomfocker.github.io/video-cuter/
+```
+
+如果主分支刚更新，GitHub Pages 可能需要 1 到 3 分钟完成部署。
 
 ### 1. 启动 ASR Docker 服务
 
@@ -226,6 +238,7 @@ node --test tests/*.test.mjs
 
 - 设计文档：`docs/superpowers/specs/2026-04-07-cut-asr-integration-design.md`
 - 实施计划：`docs/superpowers/plans/2026-04-07-cut-asr-integration.md`
+- GitHub Pages 发布：`.github/workflows/pages.yml`
 
 ## 仓库说明
 
