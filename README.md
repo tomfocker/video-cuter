@@ -157,6 +157,28 @@ docker run --rm -p 18081:8000 videocuter-full:latest
 http://127.0.0.1:18081
 ```
 
+## Docker Hub 自动发布
+
+本仓库现在会自己负责前端镜像发布。
+
+工作流见：
+
+- [.github/workflows/dockerhub.yml](/Users/andy/Code/cut/.github/workflows/dockerhub.yml)
+
+会自动发布两个镜像：
+
+- `tomfocker/video-cuter`
+  纯净版前端
+- `tomfocker/video-cuter-full`
+  完整版前端
+
+需要在 GitHub 仓库里配置：
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+
+如果这两个 secrets 还没填，workflow 会自动跳过，不会直接报红。
+
 ## 测试
 
 运行根目录纯净版测试：
