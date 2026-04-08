@@ -3,7 +3,7 @@
 一个统一维护前端源码的仓库，现在同时包含两个版本：
 
 - `纯净版`：根目录应用，只做浏览器本地视频裁剪
-- `完整版`：[`full/`](/Users/andy/Code/cut/full) 目录应用，在纯前端能力基础上接入后端语音识别与字幕辅助工作流
+- `完整版`：[`full/`](/Users/andy/Code/video-cuter/full) 目录应用，在纯前端能力基础上接入后端语音识别与字幕辅助工作流
 
 在线演示：
 
@@ -65,7 +65,7 @@ https://tomfocker.github.io/video-cuter/
 
 位置：
 
-- [full/](/Users/andy/Code/cut/full)
+- [full/](/Users/andy/Code/video-cuter/full)
 
 特点：
 
@@ -85,17 +85,17 @@ https://tomfocker.github.io/video-cuter/
 
 ## 目录结构
 
-- [index.html](/Users/andy/Code/cut/index.html)
+- [index.html](/Users/andy/Code/video-cuter/index.html)
   纯净版入口
-- [js/](/Users/andy/Code/cut/js)
+- [js/](/Users/andy/Code/video-cuter/js)
   纯净版逻辑
-- [full/index.html](/Users/andy/Code/cut/full/index.html)
+- [full/index.html](/Users/andy/Code/video-cuter/full/index.html)
   完整版入口
-- [full/js/](/Users/andy/Code/cut/full/js)
+- [full/js/](/Users/andy/Code/video-cuter/full/js)
   完整版逻辑
-- [tests/](/Users/andy/Code/cut/tests)
+- [tests/](/Users/andy/Code/video-cuter/tests)
   根目录纯净版测试
-- [full/tests/](/Users/andy/Code/cut/full/tests)
+- [full/tests/](/Users/andy/Code/video-cuter/full/tests)
   完整版测试
 
 ## 快速开始
@@ -163,7 +163,7 @@ http://127.0.0.1:18081
 
 工作流见：
 
-- [.github/workflows/dockerhub.yml](/Users/andy/Code/cut/.github/workflows/dockerhub.yml)
+- [.github/workflows/dockerhub.yml](/Users/andy/Code/video-cuter/.github/workflows/dockerhub.yml)
 
 会自动发布两个镜像：
 
@@ -211,7 +211,7 @@ node --test tests/*.test.mjs
 
 发布工作流见：
 
-- [.github/workflows/pages.yml](/Users/andy/Code/cut/.github/workflows/pages.yml)
+- [.github/workflows/pages.yml](/Users/andy/Code/video-cuter/.github/workflows/pages.yml)
 
 ## 维护建议
 
@@ -220,7 +220,7 @@ node --test tests/*.test.mjs
 - 纯净前端剪辑体验
   就改根目录
 - 带识别能力的完整版网页
-  就改 [full/](/Users/andy/Code/cut/full)
+  就改 [full/](/Users/andy/Code/video-cuter/full)
 - 识别后端本身
   就改 `funasr-server`
 - 整合部署和 gateway
