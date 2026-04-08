@@ -82,3 +82,14 @@ test('repository includes GitHub Pages deployment workflow and demo link', () =>
     assert.match(readme, /Settings\s*>\s*Pages/i);
     assert.match(readme, /GitHub Actions/i);
 });
+
+test('repository also ships a separate full frontend variant', () => {
+    const readme = fs.readFileSync(path.resolve('README.md'), 'utf8');
+
+    assert.equal(fs.existsSync(path.resolve('full/index.html')), true);
+    assert.equal(fs.existsSync(path.resolve('full/js/websocket.js')), true);
+    assert.equal(fs.existsSync(path.resolve('full/js/transcription.js')), true);
+    assert.match(readme, /纯净版/i);
+    assert.match(readme, /完整版/i);
+    assert.match(readme, /full\//i);
+});
