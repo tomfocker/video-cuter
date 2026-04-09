@@ -1,14 +1,55 @@
-function resolveDefaultServerApiUrl() {
-    const hasWindow = typeof window !== 'undefined';
-    const configured = hasWindow ? window.__CUT_CONFIG__?.serverApiUrl : undefined;
-    if (configured !== undefined) {
-        return configured;
+function normalizeServerApiUrl(url) {
+    return String(url || '').trim().replace(/\/+$/, '');
+}
+
+function resolveCurrentOrigin() {
+    const origin = window?.location?.origin;
+    return normalizeServerApiUrl(origin);
+}
+
+function readStoredServerApiUrl() {
+    if (typeof localStorage === 'undefined') return '';
+    return normalizeServerApiUrl(localStorage.getItem('serverApiUrl'));
+}
+
+function persistServerApiUrl(url) {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem('serverApiUrl', url);
+}
+
+function migrateLegacyServerApiUrl(url, currentOrigin) {
+    const normalized = normalizeServerApiUrl(url);
+    if (!normalized) return '';
+
+    if (normalized === '/api/asr') {
+        return currentOrigin || normalized;
     }
 
-    const saved = localStorage.getItem('serverApiUrl');
-    if (saved) return saved;
+    if (currentOrigin && normalized === `${currentOrigin}/api/asr`) {
+        return currentOrigin;
+    }
 
-    return '/api/asr';
+    return normalized;
+}
+
+function resolveDefaultServerApiUrl() {
+    const hasWindow = typeof window !== 'undefined';
+    const currentOrigin = hasWindow ? resolveCurrentOrigin() : '';
+    const configured = hasWindow ? window.__CUT_CONFIG__?.serverApiUrl : undefined;
+    if (configured !== undefined && configured !== null && String(configured).trim()) {
+        return migrateLegacyServerApiUrl(configured, currentOrigin);
+    }
+
+    const saved = readStoredServerApiUrl();
+    if (saved) {
+        const migrated = migrateLegacyServerApiUrl(saved, currentOrigin);
+        if (migrated && migrated !== saved) {
+            persistServerApiUrl(migrated);
+        }
+        return migrated;
+    }
+
+    return currentOrigin || '/api/asr';
 }
 
 export const AppState = {

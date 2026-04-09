@@ -36,6 +36,12 @@ function isLocalBrowserHost(locationLike = window.location) {
     return hostname === '127.0.0.1' || hostname === 'localhost';
 }
 
+function isSameOriginBaseUrl(baseUrl, locationLike = window.location) {
+    const normalized = normalizeBaseUrl(baseUrl);
+    const currentOrigin = normalizeBaseUrl(locationLike?.origin || '');
+    return Boolean(normalized && currentOrigin && normalized === currentOrigin);
+}
+
 function normalizeNumeric(value, fallback = 0) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;
@@ -153,10 +159,10 @@ function isLikelyDockerServiceHost(baseUrl) {
 export function buildServerHelpState(baseUrl, errorMessage = '') {
     const normalized = normalizeBaseUrl(baseUrl);
     const help = {
-        summary: '推荐先点击“测试连接”，确认 /healthz 可访问后再开始转录。',
+        summary: '推荐先点击“测试连接”，默认保持当前页面地址即可。',
         items: [
-            '如果你是通过 Docker bundle 打开的前端，优先使用 /api/asr。',
-            '如果你是单独运行前端静态页，再改用 http://127.0.0.1:8000 或 http://127.0.0.1:18000。'
+            '完整部署通常直接使用当前页面地址，不需要手动补 /healthz 或 /v1/audio/transcriptions。',
+            '单独调试识别服务时，再切换到 http://127.0.0.1:8000 或 http://127.0.0.1:18000。'
         ]
     };
 
@@ -165,18 +171,18 @@ export function buildServerHelpState(baseUrl, errorMessage = '') {
         return help;
     }
 
-    if (normalized.startsWith('/')) {
-        help.summary = '当前地址使用同源代理，适合 Docker bundle 或反向代理部署。';
+    if (normalized.startsWith('/') || isSameOriginBaseUrl(normalized)) {
+        help.summary = '当前地址使用同源入口，适合完整版部署。';
         help.items = [
-            '保持 /api/asr 即可，浏览器会通过当前页面同源转发到后端识别服务。',
-            '如果这里连不上，优先检查前端容器后的反向代理和后端容器是否已启动。',
-            '只有在你单独打开静态前端时，才需要改成 http://127.0.0.1:8000 或 http://127.0.0.1:18000。'
+            '默认保持当前页面地址即可，浏览器会通过同源入口访问识别服务。',
+            '如果这里连不上，优先检查前端反向代理和后端识别容器是否已启动。',
+            '只有在单独调试识别服务时，才需要改成 http://127.0.0.1:8000 或 http://127.0.0.1:18000。'
         ];
     } else if (isLikelyDockerServiceHost(normalized)) {
         help.summary = '当前地址看起来像 Docker 内部服务名，浏览器通常无法直接访问。';
         help.items = [
             'Docker 服务名只适用于容器之间互调，浏览器里不要直接填写 asr:8000 或 capswriter-funasr:8000。',
-            '如果页面是在宿主机浏览器里打开，请改用 /api/asr、http://127.0.0.1:8000 或 http://127.0.0.1:18000。',
+            '如果页面是在宿主机浏览器里打开，请改用当前页面地址、http://127.0.0.1:8000 或 http://127.0.0.1:18000。',
             '如果你确实在容器里访问前端，再确认该容器和 ASR 是否在同一个 Docker 网络。'
         ];
     }
@@ -220,7 +226,9 @@ export function getServerHealthcheckCandidates(baseUrl, locationLike = window.lo
     if (!normalized) return [];
 
     const candidates = [normalized];
-    if (normalized.startsWith('/') && isLocalBrowserHost(locationLike)) {
+    const shouldUseLocalFallbacks = isLocalBrowserHost(locationLike)
+        && (normalized.startsWith('/') || isSameOriginBaseUrl(normalized, locationLike));
+    if (shouldUseLocalFallbacks) {
         for (const fallback of ['http://127.0.0.1:18000', 'http://127.0.0.1:8000']) {
             if (!candidates.includes(fallback)) {
                 candidates.push(fallback);

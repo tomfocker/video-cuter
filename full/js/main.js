@@ -8,6 +8,7 @@ import { updateTranscribeStatus, connectToServer, transcribeVideo, renderServerH
 import { callLLM, removeFillerWords, translateToBilingual } from './llm.js';
 import { processAudioExport, processMergeAudioExport, executeSmartVideoExport } from './export.js';
 import { getRuntimeAssetConfig, buildAssetUrlCandidates } from './runtime-config.js';
+import { resolveCachedAsset } from './asset-cache.js';
 
 initTranscriptionCallbacks();
 setSwitchToVideoCallback(switchToVideo);
@@ -42,6 +43,11 @@ function restoreWorkspace() {
 }
 
 window.saveCurrentWorkspace = saveCurrentWorkspace;
+
+function getCurrentOrigin() {
+    const origin = window?.location?.origin;
+    return typeof origin === 'string' ? origin.replace(/\/+$/, '') : '/api/asr';
+}
 
 async function initApp() {
     console.log('Starting initApp...');
@@ -144,8 +150,9 @@ async function initApp() {
     }
     if (serverPresetProxyBtn) {
         serverPresetProxyBtn.addEventListener('click', () => {
-            if (serverApiInput) serverApiInput.value = '/api/asr';
-            renderServerHelp('/api/asr');
+            const url = getCurrentOrigin();
+            if (serverApiInput) serverApiInput.value = url;
+            renderServerHelp(url);
         });
     }
     if (serverPresetLocalBtn) {
@@ -286,42 +293,33 @@ async function initApp() {
     }
     
     const assetConfig = getRuntimeAssetConfig();
+    const FFMPEG_CACHE_NAME = 'ffmpeg-wasm-cache-v1';
 
-    const fetchWithFallback = async (urls, formatter) => {
-        let lastError = null;
-
-        for (const url of urls) {
-            try {
-                const resp = await fetch(url);
-                if (!resp.ok) {
-                    throw new Error(`HTTP ${resp.status}`);
-                }
-                return await formatter(resp, url);
-            } catch (error) {
-                lastError = new Error(`${url} -> ${error.message}`);
-                console.warn(`[assets] load failed from ${url}:`, error);
-            }
-        }
-
-        throw lastError || new Error('资源加载失败');
+    const formatAssetLabel = (url) => {
+        const parts = String(url || '').split('/');
+        return parts[parts.length - 1] || url;
     };
 
     const toBlobURLPatched = async (urls, mimeType, patcher) => {
-        const asset = await fetchWithFallback(urls, async (resp, url) => ({
-            body: await resp.text(),
-            url
-        }));
-        let { body } = asset;
-        if (patcher) body = patcher(body);
-        return URL.createObjectURL(new Blob([body], { type: mimeType }));
+        const asset = await resolveCachedAsset({
+            cacheName: FFMPEG_CACHE_NAME,
+            urls,
+            mimeType,
+            cacheKeySuffix: '::patched',
+            patcher
+        });
+        log(`[${asset.fromCache ? '缓存命中' : '已下载'}] ${formatAssetLabel(asset.url)}`, true);
+        return asset.objectUrl;
     };
     
     const toBlobURL = async (urls, mimeType) => {
-        const { blob } = await fetchWithFallback(urls, async (resp, url) => ({
-            blob: await resp.blob(),
-            url
-        }));
-        return URL.createObjectURL(blob);
+        const asset = await resolveCachedAsset({
+            cacheName: FFMPEG_CACHE_NAME,
+            urls,
+            mimeType
+        });
+        log(`[${asset.fromCache ? '缓存命中' : '已下载'}] ${formatAssetLabel(asset.url)}`, true);
+        return asset.objectUrl;
     };
     
     const loadFFmpeg = async () => {

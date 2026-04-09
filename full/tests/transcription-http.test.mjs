@@ -19,7 +19,7 @@ function createLocalStorage(initial = {}) {
     };
 }
 
-test('full frontend prefers same-origin ASR endpoint from runtime config', () => {
+test('full frontend prefers same-origin root endpoint from runtime config', () => {
     const localStorage = createLocalStorage();
     const { AppState } = loadModule(
         path.resolve('js/state.js'),
@@ -27,14 +27,34 @@ test('full frontend prefers same-origin ASR endpoint from runtime config', () =>
             localStorage,
             window: {
                 __CUT_CONFIG__: {
-                    serverApiUrl: '/api/asr'
+                    serverApiUrl: 'http://127.0.0.1:18080'
                 }
             }
         },
         ['AppState']
     );
 
-    assert.equal(AppState.serverApiUrl, '/api/asr');
+    assert.equal(AppState.serverApiUrl, 'http://127.0.0.1:18080');
+});
+
+test('full frontend defaults to current origin and migrates legacy /api/asr setting', () => {
+    const localStorage = createLocalStorage({
+        serverApiUrl: '/api/asr'
+    });
+    const { AppState } = loadModule(
+        path.resolve('js/state.js'),
+        {
+            localStorage,
+            window: {
+                location: {
+                    origin: 'http://127.0.0.1:18080'
+                }
+            }
+        },
+        ['AppState']
+    );
+
+    assert.equal(AppState.serverApiUrl, 'http://127.0.0.1:18080');
 });
 
 test('full frontend renders ASR, subtitle, and selection controls', () => {
@@ -47,6 +67,8 @@ test('full frontend renders ASR, subtitle, and selection controls', () => {
     assert.match(html, /id="llmSettingsModal"/);
     assert.match(html, /语音转文字/);
     assert.match(html, /确认添加选区/);
+    assert.doesNotMatch(html, /Docker bundle 打开的这个页面/);
+    assert.doesNotMatch(html, /Bundle 直连 127\.0\.0\.1:18000/);
 });
 
 test('full frontend ships ASR-specific modules', () => {

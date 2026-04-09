@@ -34,5 +34,7 @@ test('full frontend caddyfile can proxy same-origin asr requests through an env-
     const caddyfile = fs.readFileSync(path.resolve('Caddyfile'), 'utf8');
 
     assert.match(caddyfile, /handle_path \/api\/asr\/\*/);
+    assert.match(caddyfile, /handle \/healthz/);
+    assert.match(caddyfile, /handle \/v1\/audio\/transcriptions/);
     assert.match(caddyfile, /reverse_proxy \{\$CUT_ASR_PROXY_UPSTREAM:/);
 });

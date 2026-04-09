@@ -5,6 +5,18 @@
     reverse_proxy {$CUT_ASR_PROXY_UPSTREAM:127.0.0.1:9}
   }
 
+  handle /healthz {
+    reverse_proxy {$CUT_ASR_PROXY_UPSTREAM:127.0.0.1:9}
+  }
+
+  handle /v1/audio/transcriptions {
+    reverse_proxy {$CUT_ASR_PROXY_UPSTREAM:127.0.0.1:9}
+  }
+
+  handle /api/transcriptions {
+    reverse_proxy {$CUT_ASR_PROXY_UPSTREAM:127.0.0.1:9}
+  }
+
   root * /srv
   file_server
 }

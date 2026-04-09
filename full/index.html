@@ -316,17 +316,16 @@
                 <div class="space-y-2">
                     <div class="text-xs text-gray-500">快速填充</div>
                     <div class="flex flex-wrap gap-2">
-                        <button id="serverPresetProxyBtn" type="button" class="px-3 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-xs text-indigo-200 hover:bg-indigo-500/20 transition-colors">同源代理 /api/asr</button>
-                        <button id="serverPresetLocalBtn" type="button" class="px-3 py-1.5 rounded-full border border-gray-600 bg-gray-900 text-xs text-gray-200 hover:bg-gray-700 transition-colors">本机直连 127.0.0.1:8000</button>
-                        <button id="serverPresetBundleBtn" type="button" class="px-3 py-1.5 rounded-full border border-gray-600 bg-gray-900 text-xs text-gray-200 hover:bg-gray-700 transition-colors">Bundle 直连 127.0.0.1:18000</button>
+                        <button id="serverPresetProxyBtn" type="button" class="px-3 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-xs text-indigo-200 hover:bg-indigo-500/20 transition-colors">当前页面地址</button>
+                        <button id="serverPresetLocalBtn" type="button" class="px-3 py-1.5 rounded-full border border-gray-600 bg-gray-900 text-xs text-gray-200 hover:bg-gray-700 transition-colors">本机 127.0.0.1:8000</button>
+                        <button id="serverPresetBundleBtn" type="button" class="px-3 py-1.5 rounded-full border border-gray-600 bg-gray-900 text-xs text-gray-200 hover:bg-gray-700 transition-colors">端口映射 127.0.0.1:18000</button>
                     </div>
                 </div>
                 <div class="rounded-xl border border-gray-700 bg-gray-900/70 p-3 text-xs text-gray-400">
-                    如果你是通过 Docker bundle 打开的这个页面，优先使用：<code class="text-indigo-300">/api/asr</code><br>
-                    如果你是单独用静态服务器打开前端，再使用：<code class="text-indigo-300">http://127.0.0.1:8000</code> 或 <code class="text-indigo-300">http://127.0.0.1:18000</code>
+                    完整部署通常保持默认值即可；只有单独调试识别服务时，再改成 <code class="text-indigo-300">http://127.0.0.1:8000</code> 或 <code class="text-indigo-300">http://127.0.0.1:18000</code>
                 </div>
                 <div class="rounded-xl border border-gray-700 bg-gray-900/70 p-3 text-xs text-gray-400 space-y-2">
-                    <div id="serverHelpSummary" class="text-gray-200">推荐先使用上面的快捷地址，再点击“测试连接”。</div>
+                    <div id="serverHelpSummary" class="text-gray-200">推荐先点击“测试连接”，确认当前页面地址可用。</div>
                     <ul id="serverHelpList" class="list-disc space-y-1 pl-4 text-gray-400">
                         <li>浏览器里不要直接填写 <code class="text-indigo-300">asr:8000</code> 这类 Docker 服务名。</li>
                     </ul>

@@ -1,5 +1,5 @@
 window.__CUT_CONFIG__ = {
-    serverApiUrl: '/api/asr',
+    serverApiUrl: window.location?.origin || '/api/asr',
     ffmpegPackageBaseUrls: [],
     ffmpegCoreBaseUrls: [],
     wavesurferBaseUrls: [],
