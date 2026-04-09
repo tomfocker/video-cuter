@@ -148,13 +148,68 @@ docker build -t videocuter-full:latest ./full
 ### 运行完整版镜像
 
 ```bash
-docker run --rm -p 18081:8000 videocuter-full:latest
+docker run --rm -p 18081:8000 \
+  -e CUT_ASR_PROXY_UPSTREAM=host.docker.internal:18000 \
+  videocuter-full:latest
 ```
 
 然后访问：
 
 ```text
 http://127.0.0.1:18081
+```
+
+如果你的后端和前端在同一个 Docker Compose 网络里，推荐把前端容器的代理上游直接指到服务名：
+
+```yaml
+services:
+  asr:
+    image: tomfocker/funasr-server:latest
+
+  frontend:
+    image: tomfocker/video-cuter-full:latest
+    environment:
+      CUT_ASR_PROXY_UPSTREAM: asr:8000
+    ports:
+      - "18081:8000"
+```
+
+这样前端默认的 `/api/asr` 就会在容器内同网转发到后端识别服务。
+
+如果你只是本机临时跑一个静态前端而没有配置同源代理，完整版现在会在本机浏览器环境下自动回退尝试：
+
+- `http://127.0.0.1:18000`
+- `http://127.0.0.1:8000`
+
+这样本地联调时，即使 `/api/asr` 不存在，也不需要每次手动改设置。
+
+## 前端资源镜像
+
+完整版前端现在支持为浏览器侧资源配置多个镜像地址，依次回退加载：
+
+- `ffmpegPackageBaseUrls`
+- `ffmpegCoreBaseUrls`
+- `wavesurferBaseUrls`
+
+默认顺序是：
+
+- `jsDelivr`
+- `unpkg`
+
+如果你所在网络对默认 CDN 不稳定，可以在 [full/config.js](/Users/andy/Code/video-cuter/full/config.js) 或部署时注入 `window.__CUT_CONFIG__`，例如：
+
+```js
+window.__CUT_CONFIG__ = {
+  ffmpegPackageBaseUrls: [
+    'https://your-mirror.example/@ffmpeg/ffmpeg@0.12.15/dist/umd'
+  ],
+  ffmpegCoreBaseUrls: [
+    'https://your-mirror.example/@ffmpeg/core@0.12.10/dist/umd'
+  ],
+  wavesurferBaseUrls: [
+    'https://your-mirror.example/wavesurfer.js@7/dist'
+  ]
+};
 ```
 
 ## Docker Hub 自动发布

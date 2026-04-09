@@ -7,6 +7,7 @@ import { switchToVideo, renderVideoList, handleFileSelect, clearAllSegments, res
 import { updateTranscribeStatus, connectToServer, transcribeVideo, renderServerHelp } from './websocket.js';
 import { callLLM, removeFillerWords, translateToBilingual } from './llm.js';
 import { processAudioExport, processMergeAudioExport, executeSmartVideoExport } from './export.js';
+import { getRuntimeAssetConfig, buildAssetUrlCandidates } from './runtime-config.js';
 
 initTranscriptionCallbacks();
 setSwitchToVideoCallback(switchToVideo);
@@ -284,25 +285,52 @@ async function initApp() {
         if (tty) { tty.innerHTML += msgHTML; tty.scrollTop = tty.scrollHeight; }
     }
     
-    const baseURLFFMPEG = `https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd`;
-    const baseURLCore = `https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd`;
-    
-    const toBlobURLPatched = async (url, mimeType, patcher) => {
-        const resp = await fetch(url);
-        let body = await resp.text();
+    const assetConfig = getRuntimeAssetConfig();
+
+    const fetchWithFallback = async (urls, formatter) => {
+        let lastError = null;
+
+        for (const url of urls) {
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+                return await formatter(resp, url);
+            } catch (error) {
+                lastError = new Error(`${url} -> ${error.message}`);
+                console.warn(`[assets] load failed from ${url}:`, error);
+            }
+        }
+
+        throw lastError || new Error('资源加载失败');
+    };
+
+    const toBlobURLPatched = async (urls, mimeType, patcher) => {
+        const asset = await fetchWithFallback(urls, async (resp, url) => ({
+            body: await resp.text(),
+            url
+        }));
+        let { body } = asset;
         if (patcher) body = patcher(body);
         return URL.createObjectURL(new Blob([body], { type: mimeType }));
     };
     
-    const toBlobURL = async (url, mimeType) => {
-        const resp = await fetch(url);
-        const blob = await resp.blob();
+    const toBlobURL = async (urls, mimeType) => {
+        const { blob } = await fetchWithFallback(urls, async (resp, url) => ({
+            blob: await resp.blob(),
+            url
+        }));
         return URL.createObjectURL(blob);
     };
     
     const loadFFmpeg = async () => {
         log('开始加载 FFmpeg 内核...', true);
-        const ffmpegBlobURL = await toBlobURLPatched(`${baseURLFFMPEG}/ffmpeg.js`, 'text/javascript', (js) => js.replace('new URL(e.p+e.u(814),e.b)', 'r.workerLoadURL'));
+        const ffmpegBlobURL = await toBlobURLPatched(
+            buildAssetUrlCandidates(assetConfig.ffmpegPackageBaseUrls, 'ffmpeg.js'),
+            'text/javascript',
+            (js) => js.replace('new URL(e.p+e.u(814),e.b)', 'r.workerLoadURL')
+        );
         await import(ffmpegBlobURL);
         
         const FFmpegWASM = window.FFmpegWASM;
@@ -315,9 +343,18 @@ async function initApp() {
         });
         
         await AppState.ffmpeg.load({
-            workerLoadURL: await toBlobURL(`${baseURLFFMPEG}/814.ffmpeg.js`, 'text/javascript'),
-            coreURL: await toBlobURL(`${baseURLCore}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${baseURLCore}/ffmpeg-core.wasm`, 'application/wasm'),
+            workerLoadURL: await toBlobURL(
+                buildAssetUrlCandidates(assetConfig.ffmpegPackageBaseUrls, '814.ffmpeg.js'),
+                'text/javascript'
+            ),
+            coreURL: await toBlobURL(
+                buildAssetUrlCandidates(assetConfig.ffmpegCoreBaseUrls, 'ffmpeg-core.js'),
+                'text/javascript'
+            ),
+            wasmURL: await toBlobURL(
+                buildAssetUrlCandidates(assetConfig.ffmpegCoreBaseUrls, 'ffmpeg-core.wasm'),
+                'application/wasm'
+            ),
         });
         
         log('FFmpeg 内核加载成功！', true);

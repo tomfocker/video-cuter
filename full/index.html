@@ -394,26 +394,6 @@
 
     <!-- 脚本加载 -->
     <script src="./config.js"></script>
-    <script type="module">
-        import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js';
-        import RegionsPlugin from 'https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.esm.js';
-        import TimelinePlugin from 'https://unpkg.com/wavesurfer.js@7/dist/plugins/timeline.esm.js';
-        import HoverPlugin from 'https://unpkg.com/wavesurfer.js@7/dist/plugins/hover.esm.js';
-
-        window.WaveSurfer = WaveSurfer;
-        window.RegionsPlugin = RegionsPlugin;
-        window.TimelinePlugin = TimelinePlugin;
-        window.HoverPlugin = HoverPlugin;
-        
-        // 异步加载业务逻辑
-        import('./js/main.js').then(() => {
-            console.log('Main logic loaded');
-        }).catch(err => {
-            console.error('Failed to load main.js:', err);
-            if (window.location.protocol === 'file:') {
-                alert('建议使用本地服务器（如 python -m http.server）运行，以支持 JS 模块加载。');
-            }
-        });
-    </script>
+    <script type="module" src="./js/bootstrap.js"></script>
 </body>
 </html>

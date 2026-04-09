@@ -178,3 +178,92 @@ test('mergeSelections combines adjacent text selections into one clip region', (
         text: '测试'
     });
 });
+
+test('connectToServer falls back to localhost ASR when same-origin proxy is missing on local pages', async () => {
+    const connectionStatus = {
+        textContent: '',
+        className: '',
+        classList: {
+            remove() {},
+            add() {}
+        }
+    };
+    const transcribeStatus = {
+        textContent: '',
+        className: ''
+    };
+    const localStorage = createLocalStorage();
+    const requestedUrls = [];
+    const elements = {
+        connectionStatus,
+        transcribeStatus
+    };
+
+    const { connectToServer } = loadModule(
+        path.resolve('js/websocket.js'),
+        {
+            AppState: {
+                serverApiUrl: '/api/asr',
+                serverReady: false,
+                serverInfo: null,
+                currentVideoIndex: -1,
+                wavesurfer: null
+            },
+            renderTranscriptionText() {},
+            escapeHTML(value) {
+                return value;
+            },
+            document: {
+                getElementById(id) {
+                    return elements[id] || null;
+                }
+            },
+            window: {
+                location: {
+                    hostname: '127.0.0.1'
+                }
+            },
+            localStorage,
+            console,
+            setTimeout,
+            clearTimeout,
+            Blob,
+            FormData,
+            fetch: async (url) => {
+                requestedUrls.push(url);
+                if (url === '/api/asr/healthz') {
+                    return {
+                        ok: false,
+                        status: 404,
+                        async json() {
+                            return {};
+                        }
+                    };
+                }
+                if (url === 'http://127.0.0.1:18000/healthz') {
+                    return {
+                        ok: true,
+                        async json() {
+                            return {
+                                ready: true,
+                                model: 'fun_asr_nano'
+                            };
+                        }
+                    };
+                }
+                throw new Error(`Unexpected url: ${url}`);
+            }
+        },
+        ['connectToServer']
+    );
+
+    const connected = await connectToServer();
+
+    assert.equal(connected, true);
+    assert.deepEqual(requestedUrls, [
+        '/api/asr/healthz',
+        'http://127.0.0.1:18000/healthz'
+    ]);
+    assert.equal(localStorage.getItem('serverApiUrl'), 'http://127.0.0.1:18000');
+    assert.match(connectionStatus.textContent, /127\.0\.0\.1:18000/);
+});

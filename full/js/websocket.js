@@ -31,6 +31,11 @@ function normalizeBaseUrl(url) {
     return normalized;
 }
 
+function isLocalBrowserHost(locationLike = window.location) {
+    const hostname = String(locationLike?.hostname || '').trim().toLowerCase();
+    return hostname === '127.0.0.1' || hostname === 'localhost';
+}
+
 function normalizeNumeric(value, fallback = 0) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;
@@ -180,7 +185,9 @@ export function buildServerHelpState(baseUrl, errorMessage = '') {
         const detail = String(errorMessage);
         if (/HTTP 404/i.test(detail)) {
             help.items.unshift('当前地址可访问，但看起来不是 ASR 根地址。请填写服务根地址，不要手动追加 /healthz 或 /v1/audio/transcriptions。');
-        } else if (/HTTP 502|HTTP 503/i.test(detail)) {
+        } else if (/HTTP 502/i.test(detail)) {
+            help.items.unshift('当前页面能收到代理响应，但代理后的 ASR 服务没有连通。请检查前端容器的反向代理上游是否指向了正确的后端地址。');
+        } else if (/HTTP 503/i.test(detail)) {
             help.items.unshift('后端服务已连通，但模型还没准备好。通常等待容器把模型加载完成后再试即可。');
         } else if (/abort|timeout/i.test(detail)) {
             help.items.unshift('请求超时。请确认后端容器仍在运行，或先用较短音频做连通性测试。');
@@ -206,6 +213,22 @@ export function renderServerHelp(baseUrl = AppState.serverApiUrl, errorMessage =
 
 export function buildHealthcheckUrl(baseUrl) {
     return `${normalizeBaseUrl(baseUrl)}/healthz`;
+}
+
+export function getServerHealthcheckCandidates(baseUrl, locationLike = window.location) {
+    const normalized = normalizeBaseUrl(baseUrl);
+    if (!normalized) return [];
+
+    const candidates = [normalized];
+    if (normalized.startsWith('/') && isLocalBrowserHost(locationLike)) {
+        for (const fallback of ['http://127.0.0.1:18000', 'http://127.0.0.1:8000']) {
+            if (!candidates.includes(fallback)) {
+                candidates.push(fallback);
+            }
+        }
+    }
+
+    return candidates;
 }
 
 function buildTranscriptionUrl(baseUrl) {
@@ -258,29 +281,52 @@ export async function connectToServer() {
     setConnectionStatus('连接中...', 'neutral');
     renderServerHelp(baseUrl);
 
-    try {
-        const response = await fetch(buildHealthcheckUrl(baseUrl));
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
+    const candidates = getServerHealthcheckCandidates(baseUrl);
+    let lastError = null;
 
-        const payload = await response.json();
-        AppState.serverReady = Boolean(payload.ready);
-        AppState.serverInfo = payload;
+    for (const candidate of candidates) {
+        try {
+            const response = await fetch(buildHealthcheckUrl(candidate));
+            if (!response.ok) {
+                const error = new Error(`HTTP ${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
 
-        if (AppState.serverReady) {
-            setConnectionStatus(`✓ 已连接 ${payload.model || 'asr'}`, 'success');
-            renderServerHelp(baseUrl);
-        } else {
-            setConnectionStatus('服务在线，但模型尚未就绪', 'warning');
-            renderServerHelp(baseUrl, 'HTTP 503');
+            const payload = await response.json();
+            AppState.serverApiUrl = candidate;
+            AppState.serverReady = Boolean(payload.ready);
+            AppState.serverInfo = payload;
+
+            if (candidate !== baseUrl && typeof localStorage !== 'undefined') {
+                localStorage.setItem('serverApiUrl', candidate);
+            }
+
+            if (AppState.serverReady) {
+                setConnectionStatus(`✓ 已连接 ${candidate} · ${payload.model || 'asr'}`, 'success');
+                renderServerHelp(candidate);
+            } else {
+                setConnectionStatus('服务在线，但模型尚未就绪', 'warning');
+                renderServerHelp(candidate, 'HTTP 503');
+            }
+
+            updateTranscribeStatus();
+            return AppState.serverReady;
+        } catch (error) {
+            lastError = error;
+            const shouldTryFallback = candidate !== candidates[candidates.length - 1]
+                && [404, 502].includes(error.status);
+            if (shouldTryFallback) {
+                continue;
+            }
+            break;
         }
-    } catch (error) {
-        AppState.serverReady = false;
-        AppState.serverInfo = null;
-        setConnectionStatus(`✗ 连接失败: ${error.message}`, 'error');
-        renderServerHelp(baseUrl, error.message);
     }
+
+    AppState.serverReady = false;
+    AppState.serverInfo = null;
+    setConnectionStatus(`✗ 连接失败: ${lastError?.message || '未知错误'}`, 'error');
+    renderServerHelp(baseUrl, lastError?.message || '');
 
     updateTranscribeStatus();
     return AppState.serverReady;

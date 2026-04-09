@@ -1,5 +1,10 @@
 :8000 {
   encode gzip
+
+  handle_path /api/asr/* {
+    reverse_proxy {$CUT_ASR_PROXY_UPSTREAM:127.0.0.1:9}
+  }
+
   root * /srv
   file_server
 }
