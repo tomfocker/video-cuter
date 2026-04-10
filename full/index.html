@@ -322,12 +322,13 @@
                     </div>
                 </div>
                 <div class="rounded-xl border border-gray-700 bg-gray-900/70 p-3 text-xs text-gray-400">
-                    完整部署通常保持默认值即可；只有单独调试识别服务时，再改成 <code class="text-indigo-300">http://127.0.0.1:8000</code> 或 <code class="text-indigo-300">http://127.0.0.1:18000</code>
+                    默认保持当前页面地址即可；单独调试识别服务时，再切到 <code class="text-indigo-300">http://127.0.0.1:18000</code> 或 <code class="text-indigo-300">http://127.0.0.1:8000</code>
                 </div>
                 <div class="rounded-xl border border-gray-700 bg-gray-900/70 p-3 text-xs text-gray-400 space-y-2">
-                    <div id="serverHelpSummary" class="text-gray-200">推荐先点击“测试连接”，确认当前页面地址可用。</div>
+                    <div id="serverHelpSummary" class="text-gray-200">默认使用当前页面地址即可。</div>
                     <ul id="serverHelpList" class="list-disc space-y-1 pl-4 text-gray-400">
-                        <li>浏览器里不要直接填写 <code class="text-indigo-300">asr:8000</code> 这类 Docker 服务名。</li>
+                        <li>如果这里连不上，优先检查网关和识别服务容器。</li>
+                        <li>浏览器里不要直接填写 <code class="text-indigo-300">funasr-server:8000</code> 这类 Docker 服务名。</li>
                     </ul>
                 </div>
                 <div id="connectionStatus" class="hidden text-xs text-center text-gray-400"></div>

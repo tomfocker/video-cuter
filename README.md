@@ -193,6 +193,7 @@ services:
 
 默认顺序是：
 
+- 完整版镜像内置同源静态资源 `/vendor/...`
 - `jsDelivr`
 - `unpkg`
 

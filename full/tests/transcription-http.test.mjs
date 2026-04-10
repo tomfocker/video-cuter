@@ -77,6 +77,42 @@ test('full frontend ships ASR-specific modules', () => {
     assert.equal(fs.existsSync(path.resolve('js/llm.js')), true);
 });
 
+test('same-origin server help stays concise and deployment-oriented', () => {
+    const { buildServerHelpState } = loadModule(
+        path.resolve('js/websocket.js'),
+        {
+            AppState: {},
+            renderTranscriptionText() {},
+            escapeHTML(value) {
+                return value;
+            },
+            document: { getElementById() { return null; } },
+            window: {
+                location: {
+                    origin: 'http://127.0.0.1:18080',
+                    hostname: '127.0.0.1'
+                }
+            },
+            console,
+            setTimeout,
+            clearTimeout,
+            Blob,
+            FormData,
+            fetch() {
+                throw new Error('not implemented');
+            }
+        },
+        ['buildServerHelpState']
+    );
+
+    const help = buildServerHelpState('http://127.0.0.1:18080');
+
+    assert.equal(help.summary, '默认使用当前页面地址即可。');
+    assert.equal(help.items.length, 2);
+    assert.equal(help.items.some((item) => item.includes('/v1/audio/transcriptions')), false);
+    assert.equal(help.items.some((item) => item.includes('capswriter-funasr:8000')), false);
+});
+
 test('normalizeTranscriptionResult adapts backend verbose_json payload for full frontend', () => {
     const { normalizeTranscriptionResult } = loadModule(
         path.resolve('js/websocket.js'),

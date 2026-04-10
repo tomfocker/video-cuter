@@ -38,3 +38,19 @@ test('full frontend caddyfile can proxy same-origin asr requests through an env-
     assert.match(caddyfile, /handle \/v1\/audio\/transcriptions/);
     assert.match(caddyfile, /reverse_proxy \{\$CUT_ASR_PROXY_UPSTREAM:/);
 });
+
+test('full frontend config prefers same-origin bundled asset mirrors before public cdns', () => {
+    const configScript = fs.readFileSync(path.resolve('config.js'), 'utf8');
+
+    assert.match(configScript, /ffmpegPackageBaseUrls:\s*\[\s*'\/vendor\/ffmpeg\/package'\s*\]/);
+    assert.match(configScript, /ffmpegCoreBaseUrls:\s*\[\s*'\/vendor\/ffmpeg\/core'\s*\]/);
+    assert.match(configScript, /wavesurferBaseUrls:\s*\[\s*'\/vendor\/wavesurfer'\s*\]/);
+});
+
+test('full frontend docker image vendors ffmpeg and wavesurfer assets for first-load stability', () => {
+    const dockerfile = fs.readFileSync(path.resolve('Dockerfile'), 'utf8');
+
+    assert.match(dockerfile, /vendor\/ffmpeg\/package\/ffmpeg\.js/);
+    assert.match(dockerfile, /vendor\/ffmpeg\/core\/ffmpeg-core\.wasm/);
+    assert.match(dockerfile, /vendor\/wavesurfer\/plugins\/regions\.esm\.js/);
+});

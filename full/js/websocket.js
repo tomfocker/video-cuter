@@ -159,10 +159,10 @@ function isLikelyDockerServiceHost(baseUrl) {
 export function buildServerHelpState(baseUrl, errorMessage = '') {
     const normalized = normalizeBaseUrl(baseUrl);
     const help = {
-        summary: '推荐先点击“测试连接”，默认保持当前页面地址即可。',
+        summary: '默认使用当前页面地址即可。',
         items: [
-            '完整部署通常直接使用当前页面地址，不需要手动补 /healthz 或 /v1/audio/transcriptions。',
-            '单独调试识别服务时，再切换到 http://127.0.0.1:8000 或 http://127.0.0.1:18000。'
+            '如果这里连不上，优先检查网关和识别服务容器。',
+            '单独调试识别服务时，再切换到 http://127.0.0.1:18000 或 http://127.0.0.1:8000。'
         ]
     };
 
@@ -172,17 +172,16 @@ export function buildServerHelpState(baseUrl, errorMessage = '') {
     }
 
     if (normalized.startsWith('/') || isSameOriginBaseUrl(normalized)) {
-        help.summary = '当前地址使用同源入口，适合完整版部署。';
+        help.summary = '默认使用当前页面地址即可。';
         help.items = [
-            '默认保持当前页面地址即可，浏览器会通过同源入口访问识别服务。',
-            '如果这里连不上，优先检查前端反向代理和后端识别容器是否已启动。',
-            '只有在单独调试识别服务时，才需要改成 http://127.0.0.1:8000 或 http://127.0.0.1:18000。'
+            '如果这里连不上，优先检查网关到识别服务的连通性。',
+            '单独调试识别服务时，再切换到 http://127.0.0.1:18000 或 http://127.0.0.1:8000。'
         ];
     } else if (isLikelyDockerServiceHost(normalized)) {
         help.summary = '当前地址看起来像 Docker 内部服务名，浏览器通常无法直接访问。';
         help.items = [
-            'Docker 服务名只适用于容器之间互调，浏览器里不要直接填写 asr:8000 或 capswriter-funasr:8000。',
-            '如果页面是在宿主机浏览器里打开，请改用当前页面地址、http://127.0.0.1:8000 或 http://127.0.0.1:18000。',
+            'Docker 服务名只适用于容器之间互调，浏览器里不要直接填写 funasr-server:8000。',
+            '如果页面是在宿主机浏览器里打开，请改用当前页面地址、http://127.0.0.1:18000 或 http://127.0.0.1:8000。',
             '如果你确实在容器里访问前端，再确认该容器和 ASR 是否在同一个 Docker 网络。'
         ];
     }
@@ -190,15 +189,15 @@ export function buildServerHelpState(baseUrl, errorMessage = '') {
     if (errorMessage) {
         const detail = String(errorMessage);
         if (/HTTP 404/i.test(detail)) {
-            help.items.unshift('当前地址可访问，但看起来不是 ASR 根地址。请填写服务根地址，不要手动追加 /healthz 或 /v1/audio/transcriptions。');
+            help.items.unshift('当前地址可访问，但不是识别服务根地址。请直接填写服务根地址。');
         } else if (/HTTP 502/i.test(detail)) {
-            help.items.unshift('当前页面能收到代理响应，但代理后的 ASR 服务没有连通。请检查前端容器的反向代理上游是否指向了正确的后端地址。');
+            help.items.unshift('网关已收到请求，但后面的识别服务没有连通。请检查网关上游配置。');
         } else if (/HTTP 503/i.test(detail)) {
-            help.items.unshift('后端服务已连通，但模型还没准备好。通常等待容器把模型加载完成后再试即可。');
+            help.items.unshift('后端服务已连通，但模型还没准备好。稍等片刻再试。');
         } else if (/abort|timeout/i.test(detail)) {
-            help.items.unshift('请求超时。请确认后端容器仍在运行，或先用较短音频做连通性测试。');
+            help.items.unshift('请求超时。请确认后端容器仍在运行。');
         } else if (/fetch failed|failed to fetch|networkerror/i.test(detail.toLowerCase())) {
-            help.items.unshift('浏览器无法连到这个地址。请优先检查端口是否暴露、地址是否写成了容器服务名、以及是否存在跨域/反向代理问题。');
+            help.items.unshift('浏览器无法连到这个地址。请检查端口、地址和反向代理。');
         }
     }
 
